@@ -76,7 +76,14 @@ window.KanbanPlugin = (function() {
         // Save content on blur
         board.addEventListener('blur', function(e) {
             if (e.target.contentEditable === 'true') {
-                saveChanges(board.id);
+                // Determine change type based on the element being edited
+                let changeType = 'edit_card';
+                if (e.target.classList.contains('kanban-title')) {
+                    changeType = 'edit_title';
+                } else if (e.target.classList.contains('kanban-column-title')) {
+                    changeType = 'edit_column';
+                }
+                saveChanges(board.id, false, changeType);
             }
         }, true);
 
@@ -93,13 +100,15 @@ window.KanbanPlugin = (function() {
      * Set up global event listeners
      */
     function setupGlobalEventListeners() {
-        // Auto-save on page unload
-        window.addEventListener('beforeunload', function() {
-            document.querySelectorAll('.kanban-board').forEach(board => {
-                if (board.dataset.editable === 'true') {
-                    saveChanges(board.id);
-                }
-            });
+        // Note: Auto-save removed from beforeunload to avoid network errors
+        // The kanban automatically saves on each modification instead
+        
+        // Setup keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Escape key to cancel editing
+            if (e.key === 'Escape' && document.activeElement.contentEditable === 'true') {
+                document.activeElement.blur();
+            }
         });
     }
 
@@ -159,7 +168,7 @@ window.KanbanPlugin = (function() {
             // Save changes
             const board = this.closest('.kanban-board');
             if (board && board.dataset.editable === 'true') {
-                saveChanges(board.id);
+                saveChanges(board.id, false, 'move_card');
             }
         }
     }
@@ -200,9 +209,8 @@ window.KanbanPlugin = (function() {
         // Focus on the title
         const titleElement = newColumn.querySelector('.kanban-column-title');
         titleElement.focus();
-        titleElement.select();
         
-        saveChanges(boardId);
+        saveChanges(boardId, false, 'add_column');
     }
 
     /**
@@ -238,9 +246,8 @@ window.KanbanPlugin = (function() {
         // Focus on the title
         const titleElement = newCard.querySelector('.kanban-card-title');
         titleElement.focus();
-        titleElement.select();
         
-        saveChanges(board.id);
+        saveChanges(board.id, false, 'add_card');
     }
 
     /**
@@ -254,7 +261,7 @@ window.KanbanPlugin = (function() {
             column.remove();
             
             if (board.dataset.editable === 'true') {
-                saveChanges(board.id);
+                saveChanges(board.id, false, 'delete_column');
             }
         }
     }
@@ -270,26 +277,22 @@ window.KanbanPlugin = (function() {
             card.remove();
             
             if (board.dataset.editable === 'true') {
-                saveChanges(board.id);
+                saveChanges(board.id, false, 'delete_card');
             }
         }
     }
 
     /**
-     * Save board changes via AJAX
-     */
-    function saveBoard(boardId) {
-        saveChanges(boardId, true);
-    }
-
-    /**
      * Save changes to the board
      */
-    function saveChanges(boardId, showMessage = false) {
+    function saveChanges(boardId, showMessage = false, changeType = 'modification') {
         const board = document.getElementById(boardId);
         if (!board) return;
 
         const boardData = extractBoardData(board);
+        
+        // Get current page ID from DokuWiki
+        const pageId = window.JSINFO?.id || window.location.search.match(/[?&]id=([^&]+)/)?.[1] || '';
         
         // Save via AJAX
         const formData = new FormData();
@@ -297,6 +300,8 @@ window.KanbanPlugin = (function() {
         formData.append('action', 'save_board');
         formData.append('board_id', boardId);
         formData.append('board_data', JSON.stringify(boardData));
+        formData.append('change_type', changeType);
+        formData.append('page_id', pageId);
 
         fetch(DOKU_BASE + 'lib/exe/ajax.php', {
             method: 'POST',
@@ -312,6 +317,7 @@ window.KanbanPlugin = (function() {
         })
         .catch(error => {
             console.error('Erreur lors de la sauvegarde:', error);
+            // Only show error message for manual saves to avoid spam during page unload
             if (showMessage) {
                 showNotification('Erreur lors de la sauvegarde', 'error');
             }
@@ -322,10 +328,14 @@ window.KanbanPlugin = (function() {
      * Load board data from server
      */
     function loadBoardData(boardId) {
+        // Get current page ID from DokuWiki
+        const pageId = window.JSINFO?.id || window.location.search.match(/[?&]id=([^&]+)/)?.[1] || '';
+        
         const formData = new FormData();
         formData.append('call', 'kanban');
         formData.append('action', 'load_board');
         formData.append('board_id', boardId);
+        formData.append('page_id', pageId);
 
         fetch(DOKU_BASE + 'lib/exe/ajax.php', {
             method: 'POST',
@@ -456,8 +466,7 @@ window.KanbanPlugin = (function() {
         addColumn: addColumn,
         addCard: addCard,
         deleteColumn: deleteColumn,
-        deleteCard: deleteCard,
-        saveBoard: saveBoard
+        deleteCard: deleteCard
     };
 
 })();

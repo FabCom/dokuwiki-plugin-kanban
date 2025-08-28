@@ -231,7 +231,6 @@ class syntax_plugin_kanban extends SyntaxPlugin
         if ($editable === 'true') {
             $renderer->doc .= '<div class="kanban-actions">';
             $renderer->doc .= '<button class="kanban-btn kanban-btn-primary" onclick="KanbanPlugin.addColumn(\'' . $id . '\')">Ajouter Colonne</button>';
-            $renderer->doc .= '<button class="kanban-btn kanban-btn-secondary" onclick="KanbanPlugin.saveBoard(\'' . $id . '\')">Sauvegarder</button>';
             $renderer->doc .= '</div>';
         }
         
