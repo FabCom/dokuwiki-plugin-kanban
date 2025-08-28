@@ -46,6 +46,29 @@ class action_plugin_kanban extends ActionPlugin
             'type' => 'text/javascript',
             'src' => DOKU_BASE . 'lib/plugins/kanban/script.js'
         ];
+        
+        // Add user info to JSINFO for proper user identification
+        $this->addUserInfoToJSINFO();
+    }
+    
+    /**
+     * Add user information to JSINFO
+     */
+    private function addUserInfoToJSINFO()
+    {
+        global $JSINFO, $INFO;
+        
+        // Ensure JSINFO array exists
+        if (!is_array($JSINFO)) {
+            $JSINFO = array();
+        }
+        
+        // Add user information
+        $currentUser = $INFO['userinfo']['name'] ?? $INFO['client'] ?? 'Anonyme';
+        $JSINFO['kanban_user'] = $currentUser;
+        $JSINFO['kanban_user_id'] = $INFO['client'] ?? '';
+        $JSINFO['kanban_user_name'] = $INFO['userinfo']['name'] ?? '';
+        $JSINFO['kanban_user_mail'] = $INFO['userinfo']['mail'] ?? '';
     }
 
     /**
@@ -222,6 +245,15 @@ class action_plugin_kanban extends ActionPlugin
                         if (!empty($card['created'])) {
                             $attributes[] = "created:" . $card['created'];
                         }
+                        if (!empty($card['dueDate'])) {
+                            $attributes[] = "dueDate:" . $card['dueDate'];
+                        }
+                        if (!empty($card['lastModifiedBy'])) {
+                            $attributes[] = "lastModifiedBy:" . $card['lastModifiedBy'];
+                        }
+                        if (!empty($card['lastModified'])) {
+                            $attributes[] = "lastModified:" . $card['lastModified'];
+                        }
                         
                         if (!empty($attributes)) {
                             $cardLine .= " [" . implode("] [", $attributes) . "]";
@@ -307,19 +339,40 @@ class action_plugin_kanban extends ActionPlugin
         }
         
         // Find kanban block with the same ID
-        $pattern = '/<kanban[^>]*id="' . preg_quote($boardId, '/') . '"[^>]*>(.*?)<\/kanban>/s';
+        $pattern = '/<kanban([^>]*id="' . preg_quote($boardId, '/') . '"[^>]*)>(.*?)<\/kanban>/s';
         
         if (preg_match($pattern, $currentContent, $matches)) {
+            $kanbanTag = $matches[1];
+            $kanbanContent = trim($matches[2]);
+            
+            // Extract title from kanban tag attributes
+            $title = 'Kanban Board'; // default
+            if (preg_match('/title=["\']([^"\']*)["\']/', $kanbanTag, $titleMatch)) {
+                $title = $titleMatch[1];
+            }
+            
             // Parse the kanban content
-            $kanbanContent = trim($matches[1]);
-            return $this->parseKanbanContentToData($kanbanContent);
+            $data = $this->parseKanbanContentToData($kanbanContent);
+            $data['title'] = $title; // Override with extracted title
+            return $data;
         }
         
         // If no specific ID match, try to find first kanban block
-        $pattern = '/<kanban[^>]*>(.*?)<\/kanban>/s';
+        $pattern = '/<kanban([^>]*)>(.*?)<\/kanban>/s';
         if (preg_match($pattern, $currentContent, $matches)) {
-            $kanbanContent = trim($matches[1]);
-            return $this->parseKanbanContentToData($kanbanContent);
+            $kanbanTag = $matches[1];
+            $kanbanContent = trim($matches[2]);
+            
+            // Extract title from kanban tag attributes
+            $title = 'Kanban Board'; // default
+            if (preg_match('/title=["\']([^"\']*)["\']/', $kanbanTag, $titleMatch)) {
+                $title = $titleMatch[1];
+            }
+            
+            // Parse the kanban content
+            $data = $this->parseKanbanContentToData($kanbanContent);
+            $data['title'] = $title; // Override with extracted title
+            return $data;
         }
         
         return null;
@@ -331,7 +384,7 @@ class action_plugin_kanban extends ActionPlugin
     private function parseKanbanContentToData($content)
     {
         $data = [
-            'title' => 'Kanban Board',
+            'title' => 'Kanban Board', // Valeur par défaut, sera écrasée si trouvée
             'columns' => []
         ];
         
@@ -382,9 +435,12 @@ class action_plugin_kanban extends ActionPlugin
             'description' => '',
             'priority' => 'normal',
             'assignee' => '',
+            'dueDate' => '',
             'tags' => [],
             'creator' => '',
-            'created' => ''
+            'created' => '',
+            'lastModifiedBy' => '',
+            'lastModified' => ''
         ];
         
         // Parse card format: Title [priority:high] [assignee:John] [tags:urgent,bug] [creator:admin] [created:2024-01-01] [description:...]

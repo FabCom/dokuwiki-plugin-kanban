@@ -12,13 +12,234 @@ window.KanbanPlugin = (function() {
     let isPageUnloading = false; // Flag to prevent saves during page unload
 
     /**
+     * Get current user name from DokuWiki
+     */
+    function getCurrentUser() {
+        // Try the new kanban-specific JSINFO first
+        if (window.JSINFO && JSINFO.kanban_user) {
+            return JSINFO.kanban_user;
+        }
+        
+        // Try multiple sources for user info
+        if (window.JSINFO && JSINFO.user) {
+            return JSINFO.user;
+        }
+        
+        // Try to get from DokuWiki global
+        if (window.dw && dw.user) {
+            return dw.user;
+        }
+        
+        // Try to get from global INFO
+        if (window.INFO && INFO.user) {
+            return INFO.user;
+        }
+        
+        // Check if user is logged in via cookie or session
+        const userCookie = document.cookie.split(';').find(cookie => 
+            cookie.trim().startsWith('DokuWiki=') || cookie.trim().startsWith('DW')
+        );
+        
+        if (userCookie) {
+            // User seems to be logged in, try to get username from page meta
+            const metaUser = document.querySelector('meta[name="user"]');
+            if (metaUser) {
+                return metaUser.content;
+            }
+            
+            // Try to get from body class or data attributes
+            const bodyClass = document.body.className.match(/user-(\w+)/);
+            if (bodyClass) {
+                return bodyClass[1];
+            }
+        }
+        
+        console.log('Debug: Could not determine current user, available data:', {
+            JSINFO: window.JSINFO,
+            dw: window.dw,
+            INFO: window.INFO,
+            cookies: document.cookie
+        });
+        
+        return 'Anonyme';
+    }
+
+    /**
+     * Get current date in French format
+     */
+    function getCurrentDate() {
+        return new Date().toLocaleDateString('fr-FR');
+    }
+
+    /**
+     * Add filter and sort controls to a board
+     */
+    function addControlsToBoard(board) {
+        if (board.querySelector('.kanban-controls')) return; // Already added
+        
+        const controls = document.createElement('div');
+        controls.className = 'kanban-controls';
+        controls.innerHTML = `
+            <div class="kanban-filter-group">
+                <label>Filtrer par priorité:</label>
+                <select class="kanban-filter-select" data-filter="priority">
+                    <option value="">Toutes</option>
+                    <option value="low">Basse</option>
+                    <option value="normal">Normale</option>
+                    <option value="medium">Moyenne</option>
+                    <option value="high">Haute</option>
+                </select>
+            </div>
+            
+            <div class="kanban-filter-group">
+                <label>Filtrer par assigné:</label>
+                <select class="kanban-filter-select" data-filter="assignee">
+                    <option value="">Tous</option>
+                </select>
+            </div>
+            
+            <div class="kanban-filter-group">
+                <label>Trier par:</label>
+                <button class="kanban-sort-btn" data-sort="priority">Priorité</button>
+                <button class="kanban-sort-btn" data-sort="dueDate">Échéance</button>
+                <button class="kanban-sort-btn" data-sort="created">Date création</button>
+            </div>
+        `;
+        
+        board.insertBefore(controls, board.querySelector('.kanban-columns'));
+        
+        // Populate assignee filter
+        populateAssigneeFilter(board);
+        
+        // Add event listeners
+        setupControlListeners(board);
+    }
+
+    /**
+     * Populate assignee filter with unique values
+     */
+    function populateAssigneeFilter(board) {
+        const assigneeSelect = board.querySelector('[data-filter="assignee"]');
+        const assignees = new Set();
+        
+        board.querySelectorAll('.kanban-assignee').forEach(element => {
+            const assignee = element.textContent.trim();
+            if (assignee) assignees.add(assignee);
+        });
+        
+        assignees.forEach(assignee => {
+            const option = document.createElement('option');
+            option.value = assignee;
+            option.textContent = assignee;
+            assigneeSelect.appendChild(option);
+        });
+    }
+
+    /**
+     * Setup event listeners for controls
+     */
+    function setupControlListeners(board) {
+        // Filter listeners
+        board.querySelectorAll('.kanban-filter-select').forEach(select => {
+            select.addEventListener('change', () => applyFilters(board));
+        });
+        
+        // Sort listeners
+        board.querySelectorAll('.kanban-sort-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Toggle active state
+                board.querySelectorAll('.kanban-sort-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                const sortBy = btn.dataset.sort;
+                sortCards(board, sortBy);
+            });
+        });
+    }
+
+    /**
+     * Apply filters to cards
+     */
+    function applyFilters(board) {
+        const priorityFilter = board.querySelector('[data-filter="priority"]').value;
+        const assigneeFilter = board.querySelector('[data-filter="assignee"]').value;
+        
+        board.querySelectorAll('.kanban-card').forEach(card => {
+            let visible = true;
+            
+            // Priority filter
+            if (priorityFilter) {
+                const cardPriority = Array.from(card.classList)
+                    .find(cls => cls.startsWith('priority-'))?.replace('priority-', '') || 'normal';
+                if (cardPriority !== priorityFilter) visible = false;
+            }
+            
+            // Assignee filter
+            if (assigneeFilter) {
+                const cardAssignee = card.querySelector('.kanban-assignee')?.textContent.trim() || '';
+                if (cardAssignee !== assigneeFilter) visible = false;
+            }
+            
+            card.classList.toggle('filtered-out', !visible);
+        });
+    }
+
+    /**
+     * Sort cards within columns
+     */
+    function sortCards(board, sortBy) {
+        board.querySelectorAll('.kanban-column').forEach(column => {
+            const cardsContainer = column.querySelector('.kanban-cards');
+            const cards = Array.from(cardsContainer.querySelectorAll('.kanban-card'));
+            
+            cards.sort((a, b) => {
+                let aValue, bValue;
+                
+                switch (sortBy) {
+                    case 'priority':
+                        const priorityOrder = { low: 1, normal: 2, medium: 3, high: 4 };
+                        aValue = priorityOrder[Array.from(a.classList).find(cls => cls.startsWith('priority-'))?.replace('priority-', '') || 'normal'];
+                        bValue = priorityOrder[Array.from(b.classList).find(cls => cls.startsWith('priority-'))?.replace('priority-', '') || 'normal'];
+                        return bValue - aValue; // High to low
+                        
+                    case 'dueDate':
+                        aValue = a.querySelector('.kanban-due-date')?.dataset.date || '9999-12-31';
+                        bValue = b.querySelector('.kanban-due-date')?.dataset.date || '9999-12-31';
+                        return new Date(aValue) - new Date(bValue); // Earliest first
+                        
+                    case 'created':
+                        aValue = a.querySelector('.kanban-card-date')?.textContent.trim() || '01/01/1970';
+                        bValue = b.querySelector('.kanban-card-date')?.textContent.trim() || '01/01/1970';
+                        // Convert DD/MM/YYYY to Date
+                        const parseDate = (dateStr) => {
+                            const [day, month, year] = dateStr.split('/');
+                            return new Date(year, month - 1, day);
+                        };
+                        return parseDate(bValue) - parseDate(aValue); // Newest first
+                        
+                    default:
+                        return 0;
+                }
+            });
+            
+            // Re-append cards in sorted order
+            cards.forEach(card => cardsContainer.appendChild(card));
+        });
+        
+        // Save changes if board is editable
+        if (board.dataset.editable === 'true') {
+            saveChanges(board.id, false, 'sort_cards');
+        }
+    }
+
+    /**
      * Initialize kanban boards on page load
      */
     function init() {
         console.log('Kanban Plugin: Initializing...');
         
         // Initialize all kanban boards on the page
-        document.querySelectorAll('.kanban-board').forEach(initBoard);
+        document.querySelectorAll('.kanban-board').forEach(initializeBoard);
         
         // Set up global event listeners
         setupGlobalEventListeners();
@@ -27,28 +248,18 @@ window.KanbanPlugin = (function() {
     }
 
     /**
-     * Initialize a single kanban board
+     * Initialize kanban board
      */
-    function initBoard(board) {
-        const boardId = board.id;
-        const isEditable = board.dataset.editable === 'true';
-        const isSortable = board.dataset.sortable === 'true';
+    function initializeBoard(board) {
+        if (board.dataset.initialized === 'true') return;
         
-        console.log(`Kanban Plugin: Initializing board ${boardId}`);
+        setupDragAndDrop(board);
+        setupCardDoubleClick(board);
+        addControlsToBoard(board);
         
-        if (isSortable) {
-            setupDragAndDrop(board);
-        }
-        
-        if (isEditable) {
-            setupEditableContent(board);
-        }
-        
-        // Load saved data
-        loadBoardData(boardId);
-    }
-
-    /**
+        // Mark as initialized
+        board.dataset.initialized = 'true';
+    }    /**
      * Set up drag and drop functionality
      */
     function setupDragAndDrop(board) {
@@ -95,6 +306,19 @@ window.KanbanPlugin = (function() {
                 e.target.blur();
             }
         }, true);
+    }
+
+    /**
+     * Setup double-click events on cards for editing
+     */
+    function setupCardDoubleClick(board) {
+        board.querySelectorAll('.kanban-card').forEach(card => {
+            card.addEventListener('dblclick', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                editCard(this.id);
+            });
+        });
     }
 
     /**
@@ -168,12 +392,27 @@ window.KanbanPlugin = (function() {
             // Move the card
             this.appendChild(draggedCard);
             
+            // Update last modified info
+            updateLastModified(draggedCard);
+            
             // Save changes
             const board = this.closest('.kanban-board');
             if (board && board.dataset.editable === 'true' && !isPageUnloading) {
                 saveChanges(board.id, false, 'move_card');
             }
         }
+    }
+
+    /**
+     * Update last modified info for a card
+     */
+    function updateLastModified(cardElement) {
+        const cardData = {
+            lastModifiedBy: getCurrentUser(),
+            lastModified: getCurrentDate()
+        };
+        
+        updateCardMeta(cardElement, { ...extractCardData(cardElement), ...cardData });
     }
 
     /**
@@ -338,15 +577,20 @@ window.KanbanPlugin = (function() {
                     </select>
                 </div>
                 
-                <div class="kanban-modal-field">
+                                <div class="kanban-modal-field">
                     <label for="card-assignee">Assigné à</label>
-                    <input type="text" id="card-assignee" value="${escapeHtml(cardData.assignee)}" placeholder="Nom d'utilisateur">
+                    <input type="text" id="card-assignee" value="${escapeHtml(cardData.assignee || '')}" placeholder="Nom d'utilisateur">
                 </div>
                 
                 <div class="kanban-modal-field">
-                    <label for="card-tags">Tags</label>
-                    <input type="text" id="card-tags" value="${cardData.tags.join(', ')}" placeholder="Tag1, Tag2, Tag3">
-                    <div class="kanban-modal-tags" id="card-tags-display"></div>
+                    <label for="card-due-date">Date d'échéance</label>
+                    <input type="date" id="card-due-date" value="${cardData.dueDate || ''}" placeholder="YYYY-MM-DD">
+                </div>
+                
+                <div class="kanban-modal-field">
+                    <label for="card-tags">Tags (séparés par des virgules)</label>
+                    <input type="text" id="card-tags" value="${cardData.tags ? cardData.tags.join(', ') : ''}" placeholder="urgent, bug, feature">
+                    <div id="card-tags-display" class="kanban-modal-tags-display"></div>
                 </div>
                 
                 <div class="kanban-modal-field">
@@ -394,7 +638,10 @@ window.KanbanPlugin = (function() {
                 description: modal.querySelector('#card-description').value.trim(),
                 priority: modal.querySelector('#card-priority').value,
                 assignee: modal.querySelector('#card-assignee').value.trim(),
-                tags: modal.querySelector('#card-tags').value.split(',').map(tag => tag.trim()).filter(tag => tag)
+                dueDate: modal.querySelector('#card-due-date').value.trim(),
+                tags: modal.querySelector('#card-tags').value.split(',').map(tag => tag.trim()).filter(tag => tag),
+                lastModifiedBy: getCurrentUser(),
+                lastModified: getCurrentDate()
             };
             
             console.log('📝 Données de la modal avant sauvegarde:', updatedData);
@@ -476,6 +723,9 @@ window.KanbanPlugin = (function() {
         // Update meta information (creator, date) if present
         updateCardMeta(cardElement, cardData);
         
+        // Update due date display
+        updateCardDueDate(cardElement, cardData);
+        
         console.log('✅ Affichage carte mis à jour');
     }
 
@@ -534,9 +784,53 @@ window.KanbanPlugin = (function() {
                 metaContent += `<span class="kanban-card-date">${escapeHtml(cardData.created)}</span>`;
             }
             
+            // Add last modified info
+            if (cardData.lastModifiedBy || cardData.lastModified) {
+                metaContent += `<div class="kanban-last-modified">`;
+                if (cardData.lastModifiedBy) {
+                    metaContent += `<span class="modified-by">${escapeHtml(cardData.lastModifiedBy)}</span>`;
+                }
+                if (cardData.lastModified) {
+                    metaContent += `<span class="modified-date">${escapeHtml(cardData.lastModified)}</span>`;
+                }
+                metaContent += `</div>`;
+            }
+            
             metaElement.innerHTML = metaContent;
         } else if (metaElement && !cardData.creator && !cardData.created) {
             metaElement.remove();
+        }
+    }
+
+    /**
+     * Update card due date display
+     */
+    function updateCardDueDate(cardElement, cardData) {
+        let dueDateElement = cardElement.querySelector('.kanban-due-date');
+        
+        if (cardData.dueDate) {
+            if (!dueDateElement) {
+                dueDateElement = document.createElement('div');
+                dueDateElement.className = 'kanban-due-date';
+                // Insert after description or header
+                const insertAfter = cardElement.querySelector('.kanban-card-description') || 
+                                  cardElement.querySelector('.kanban-card-header');
+                insertAfter.after(dueDateElement);
+            }
+            
+            const dueDate = new Date(cardData.dueDate);
+            const today = new Date();
+            const isOverdue = dueDate < today;
+            const isToday = dueDate.toDateString() === today.toDateString();
+            
+            dueDateElement.className = 'kanban-due-date';
+            if (isOverdue) dueDateElement.classList.add('overdue');
+            else if (isToday) dueDateElement.classList.add('today');
+            
+            dueDateElement.dataset.date = cardData.dueDate;
+            dueDateElement.innerHTML = `⏰ ${dueDate.toLocaleDateString('fr-FR')}`;
+        } else if (dueDateElement) {
+            dueDateElement.remove();
         }
     }
 
@@ -689,9 +983,12 @@ window.KanbanPlugin = (function() {
                     description: '',
                     priority: 'normal',
                     assignee: '',
+                    dueDate: '',
                     tags: [],
                     creator: '',
-                    created: ''
+                    created: '',
+                    lastModifiedBy: '',
+                    lastModified: ''
                 };
                 
                 // Extract description if present
@@ -726,6 +1023,21 @@ window.KanbanPlugin = (function() {
                 const dateElement = card.querySelector('.kanban-card-date');
                 if (dateElement) {
                     cardData.created = dateElement.textContent.trim();
+                }
+                
+                // Extract due date
+                const dueDateElement = card.querySelector('.kanban-due-date');
+                if (dueDateElement) {
+                    cardData.dueDate = dueDateElement.dataset.date || dueDateElement.textContent.trim();
+                }
+                
+                // Extract last modified info
+                const lastModifiedElement = card.querySelector('.kanban-last-modified');
+                if (lastModifiedElement) {
+                    const modifiedBy = lastModifiedElement.querySelector('.modified-by');
+                    const modifiedDate = lastModifiedElement.querySelector('.modified-date');
+                    if (modifiedBy) cardData.lastModifiedBy = modifiedBy.textContent.trim();
+                    if (modifiedDate) cardData.lastModified = modifiedDate.textContent.trim();
                 }
                 
                 console.log(`📋 Carte ${cardData.id}:`, cardData);

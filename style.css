@@ -624,8 +624,120 @@
 
 /* ===== RESPONSIVE DESIGN ===== */
 
-/* Responsive design */
+/* Card due date */
+.kanban-due-date {
+    font-size: 12px;
+    color: #666;
+    margin: 5px 0;
+    padding: 3px 6px;
+    background: #f0f8ff;
+    border-radius: 3px;
+    border-left: 3px solid #007cba;
+}
+
+.kanban-due-date.today {
+    background: #fff3cd;
+    border-left-color: #ffc107;
+    color: #856404;
+}
+
+.kanban-due-date.overdue {
+    background: #f8d7da;
+    border-left-color: #dc3545;
+    color: #721c24;
+}
+
+/* Last modified info */
+.kanban-last-modified {
+    font-size: 11px;
+    color: #999;
+    margin-top: 5px;
+    font-style: italic;
+}
+
+.kanban-last-modified .modified-by {
+    margin-right: 5px;
+}
+
+/* Filter and sort controls */
+.kanban-controls {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.kanban-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.kanban-filter-group label {
+    font-weight: 500;
+    color: #374151;
+    margin-right: 5px;
+}
+
+.kanban-filter-select {
+    padding: 6px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: white;
+    font-size: 14px;
+    min-width: 120px;
+}
+
+.kanban-sort-btn {
+    padding: 6px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.kanban-sort-btn:hover {
+    background: #f9fafb;
+    border-color: #9ca3af;
+}
+
+.kanban-sort-btn.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+}
+
+/* Cards during filtering */
+.kanban-card.filtered-out {
+    display: none;
+}
+
+.kanban-card.highlighted {
+    box-shadow: 0 0 0 2px #3b82f6;
+}
+
+/* Responsive controls */
 @media (max-width: 768px) {
+    .kanban-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .kanban-filter-group {
+        justify-content: space-between;
+    }
+    
+    .kanban-filter-select,
+    .kanban-sort-btn {
+        flex: 1;
+    }
     .kanban-board {
         padding: 15px;
     }
