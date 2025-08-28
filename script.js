@@ -9,6 +9,7 @@ window.KanbanPlugin = (function() {
     // Private variables
     let draggedCard = null;
     let isDragging = false;
+    let isPageUnloading = false; // Flag to prevent saves during page unload
 
     /**
      * Initialize kanban boards on page load
@@ -75,7 +76,7 @@ window.KanbanPlugin = (function() {
     function setupEditableContent(board) {
         // Save content on blur
         board.addEventListener('blur', function(e) {
-            if (e.target.contentEditable === 'true') {
+            if (e.target.contentEditable === 'true' && !isPageUnloading) {
                 // Determine change type based on the element being edited
                 let changeType = 'edit_card';
                 if (e.target.classList.contains('kanban-title')) {
@@ -100,8 +101,10 @@ window.KanbanPlugin = (function() {
      * Set up global event listeners
      */
     function setupGlobalEventListeners() {
-        // Note: Auto-save removed from beforeunload to avoid network errors
-        // The kanban automatically saves on each modification instead
+        // Detect page unloading to prevent unnecessary saves
+        window.addEventListener('beforeunload', function() {
+            isPageUnloading = true;
+        });
         
         // Setup keyboard shortcuts
         document.addEventListener('keydown', function(e) {
@@ -167,7 +170,7 @@ window.KanbanPlugin = (function() {
             
             // Save changes
             const board = this.closest('.kanban-board');
-            if (board && board.dataset.editable === 'true') {
+            if (board && board.dataset.editable === 'true' && !isPageUnloading) {
                 saveChanges(board.id, false, 'move_card');
             }
         }
@@ -286,6 +289,11 @@ window.KanbanPlugin = (function() {
      * Save changes to the board
      */
     function saveChanges(boardId, showMessage = false, changeType = 'modification') {
+        // Don't save if page is unloading
+        if (isPageUnloading) {
+            return;
+        }
+        
         const board = document.getElementById(boardId);
         if (!board) return;
 
