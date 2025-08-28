@@ -275,7 +275,9 @@ window.KanbanPlugin = (function() {
         const cardData = extractCardData(card);
         
         showCardModal(cardData, function(updatedData) {
+            console.log('🔄 Mise à jour de la carte avec:', updatedData);
             updateCardDisplay(card, updatedData);
+            console.log('✅ DOM mis à jour, sauvegarde...');
             saveChanges(board.id, false, 'edit_card');
         });
     }
@@ -395,6 +397,8 @@ window.KanbanPlugin = (function() {
                 tags: modal.querySelector('#card-tags').value.split(',').map(tag => tag.trim()).filter(tag => tag)
             };
             
+            console.log('📝 Données de la modal avant sauvegarde:', updatedData);
+            
             if (!updatedData.title) {
                 alert('Le titre est obligatoire !');
                 return;
@@ -442,6 +446,8 @@ window.KanbanPlugin = (function() {
      * Update card display with new data
      */
     function updateCardDisplay(cardElement, cardData) {
+        console.log('🎨 Mise à jour affichage carte:', cardData);
+        
         // Update classes
         cardElement.className = cardElement.className.replace(/priority-\w+/, `priority-${cardData.priority}`);
         
@@ -466,6 +472,11 @@ window.KanbanPlugin = (function() {
         
         // Update footer with tags, priority, assignee
         updateCardFooter(cardElement, cardData);
+        
+        // Update meta information (creator, date) if present
+        updateCardMeta(cardElement, cardData);
+        
+        console.log('✅ Affichage carte mis à jour');
     }
 
     /**
@@ -486,15 +497,47 @@ window.KanbanPlugin = (function() {
             footer.innerHTML += `<span class="kanban-priority">${escapeHtml(cardData.priority)}</span>`;
         }
         
+        // Tags
+        if (cardData.tags && cardData.tags.length > 0) {
+            cardData.tags.forEach(tag => {
+                if (tag.trim()) {
+                    footer.innerHTML += `<span class="kanban-tag">${escapeHtml(tag.trim())}</span>`;
+                }
+            });
+        }
+        
         // Assignee
         if (cardData.assignee) {
             footer.innerHTML += `<span class="kanban-assignee">${escapeHtml(cardData.assignee)}</span>`;
         }
+    }
+
+    /**
+     * Update card meta information
+     */
+    function updateCardMeta(cardElement, cardData) {
+        let metaElement = cardElement.querySelector('.kanban-card-meta');
+        if (!metaElement && (cardData.creator || cardData.created)) {
+            metaElement = document.createElement('div');
+            metaElement.className = 'kanban-card-meta';
+            cardElement.appendChild(metaElement);
+        }
         
-        // Tags
-        cardData.tags.forEach(tag => {
-            footer.innerHTML += `<span class="kanban-tag">${escapeHtml(tag)}</span>`;
-        });
+        if (metaElement && (cardData.creator || cardData.created)) {
+            let metaContent = '';
+            
+            if (cardData.creator) {
+                metaContent += `<span class="kanban-card-creator">Par <span>${escapeHtml(cardData.creator)}</span></span>`;
+            }
+            
+            if (cardData.created) {
+                metaContent += `<span class="kanban-card-date">${escapeHtml(cardData.created)}</span>`;
+            }
+            
+            metaElement.innerHTML = metaContent;
+        } else if (metaElement && !cardData.creator && !cardData.created) {
+            metaElement.remove();
+        }
     }
 
     /**
@@ -551,6 +594,7 @@ window.KanbanPlugin = (function() {
         if (!board) return;
 
         const boardData = extractBoardData(board);
+        console.log('💾 Sauvegarde données:', boardData);
         
         // Get current page ID from DokuWiki
         const pageId = window.JSINFO?.id || window.location.search.match(/[?&]id=([^&]+)/)?.[1] || '';
@@ -564,20 +608,31 @@ window.KanbanPlugin = (function() {
         formData.append('change_type', changeType);
         formData.append('page_id', pageId);
 
+        console.log('📡 Envoi vers serveur - FormData:', {
+            call: 'kanban',
+            action: 'save_board',
+            board_id: boardId,
+            board_data: JSON.stringify(boardData),
+            change_type: changeType,
+            page_id: pageId
+        });
+
         fetch(DOKU_BASE + 'lib/exe/ajax.php', {
             method: 'POST',
             body: formData
         })
         .then(response => response.json())
         .then(data => {
+            console.log('📨 Réponse serveur:', data);
             if (data.success && showMessage) {
                 showNotification('Tableau sauvegardé avec succès', 'success');
             } else if (data.error) {
+                console.error('❌ Erreur serveur:', data.error);
                 showNotification('Erreur: ' + data.error, 'error');
             }
         })
         .catch(error => {
-            console.error('Erreur lors de la sauvegarde:', error);
+            console.error('❌ Erreur lors de la sauvegarde:', error);
             // Only show error message for manual saves to avoid spam during page unload
             if (showMessage) {
                 showNotification('Erreur lors de la sauvegarde', 'error');
@@ -617,6 +672,7 @@ window.KanbanPlugin = (function() {
      * Extract board data from DOM
      */
     function extractBoardData(board) {
+        console.log('📤 Extraction des données du tableau...');
         const columns = [];
         
         board.querySelectorAll('.kanban-column').forEach((column, index) => {
@@ -633,7 +689,9 @@ window.KanbanPlugin = (function() {
                     description: '',
                     priority: 'normal',
                     assignee: '',
-                    tags: []
+                    tags: [],
+                    creator: '',
+                    created: ''
                 };
                 
                 // Extract description if present
@@ -648,16 +706,42 @@ window.KanbanPlugin = (function() {
                     cardData.priority = priorityClass.replace('priority-', '');
                 }
                 
+                // Extract assignee from footer
+                const assigneeElement = card.querySelector('.kanban-assignee');
+                if (assigneeElement) {
+                    cardData.assignee = assigneeElement.textContent.trim();
+                }
+                
+                // Extract tags from footer
+                const tagElements = card.querySelectorAll('.kanban-tag');
+                cardData.tags = Array.from(tagElements).map(tag => tag.textContent.trim());
+                
+                // Extract creator from meta
+                const creatorElement = card.querySelector('.kanban-card-creator span');
+                if (creatorElement) {
+                    cardData.creator = creatorElement.textContent.trim();
+                }
+                
+                // Extract created date from meta
+                const dateElement = card.querySelector('.kanban-card-date');
+                if (dateElement) {
+                    cardData.created = dateElement.textContent.trim();
+                }
+                
+                console.log(`📋 Carte ${cardData.id}:`, cardData);
                 columnData.cards.push(cardData);
             });
             
             columns.push(columnData);
         });
         
-        return {
+        const boardData = {
             title: board.querySelector('.kanban-title').textContent.trim(),
             columns: columns
         };
+        
+        console.log('📊 Données complètes du tableau:', boardData);
+        return boardData;
     }
 
     /**

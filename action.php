@@ -115,6 +115,9 @@ class action_plugin_kanban extends ActionPlugin
             return;
         }
         
+        // Debug: Log des données décodées
+        error_log("Kanban Debug - Données reçues et décodées: " . print_r($data, true));
+        
         // Check permissions
         if (!auth_quickaclcheck($pageId) >= AUTH_EDIT) {
             error_log("Kanban Plugin: Insufficient permissions for page: $pageId");
@@ -199,6 +202,11 @@ class action_plugin_kanban extends ActionPlugin
                         
                         // Add card attributes
                         $attributes = [];
+                        if (!empty($card['description'])) {
+                            // Escape description for wiki format (replace newlines and brackets)
+                            $desc = str_replace(["\n", "[", "]"], ["\\n", "&#91;", "&#93;"], $card['description']);
+                            $attributes[] = "description:" . $desc;
+                        }
                         if (!empty($card['priority']) && $card['priority'] !== 'normal') {
                             $attributes[] = "priority:" . $card['priority'];
                         }
@@ -208,10 +216,19 @@ class action_plugin_kanban extends ActionPlugin
                         if (!empty($card['tags']) && is_array($card['tags'])) {
                             $attributes[] = "tags:" . implode(',', $card['tags']);
                         }
+                        if (!empty($card['creator'])) {
+                            $attributes[] = "creator:" . $card['creator'];
+                        }
+                        if (!empty($card['created'])) {
+                            $attributes[] = "created:" . $card['created'];
+                        }
                         
                         if (!empty($attributes)) {
                             $cardLine .= " [" . implode("] [", $attributes) . "]";
                         }
+                        
+                        // Debug log pour voir ce qui est généré
+                        error_log("Kanban Debug - Carte générée: " . $cardLine);
                         
                         $content .= $cardLine . "\n";
                     }
@@ -365,26 +382,30 @@ class action_plugin_kanban extends ActionPlugin
             'description' => '',
             'priority' => 'normal',
             'assignee' => '',
-            'tags' => []
+            'tags' => [],
+            'creator' => '',
+            'created' => ''
         ];
         
-        // Parse card format: Title [priority:high] [assignee:John] [tags:urgent,bug]
+        // Parse card format: Title [priority:high] [assignee:John] [tags:urgent,bug] [creator:admin] [created:2024-01-01] [description:...]
         if (preg_match('/^(.*?)\s*(?:\[(.*?)\])*$/', $content, $matches)) {
             $card['title'] = trim($matches[1]);
             
             // Parse all attribute blocks
             if (preg_match_all('/\[([^\]]+)\]/', $content, $attrMatches)) {
                 foreach ($attrMatches[1] as $attrBlock) {
-                    if (preg_match_all('/(\w+):([^,\s]+)/', $attrBlock, $attrs, PREG_SET_ORDER)) {
-                        foreach ($attrs as $attr) {
-                            $key = $attr[1];
-                            $value = $attr[2];
-                            
-                            if ($key === 'tags') {
-                                $card['tags'] = array_map('trim', explode(',', $value));
-                            } else {
-                                $card[$key] = $value;
-                            }
+                    if (strpos($attrBlock, ':') !== false) {
+                        list($key, $value) = explode(':', $attrBlock, 2);
+                        $key = trim($key);
+                        $value = trim($value);
+                        
+                        if ($key === 'tags') {
+                            $card['tags'] = array_map('trim', explode(',', $value));
+                        } elseif ($key === 'description') {
+                            // Decode description (restore newlines and brackets)
+                            $card['description'] = str_replace(["\\n", "&#91;", "&#93;"], ["\n", "[", "]"], $value);
+                        } else {
+                            $card[$key] = $value;
                         }
                     }
                 }
