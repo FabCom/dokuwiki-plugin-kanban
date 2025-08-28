@@ -246,11 +246,264 @@ window.KanbanPlugin = (function() {
             newCard.addEventListener('dragend', handleDragEnd);
         }
         
-        // Focus on the title
+        // Focus on the title and select all text
         const titleElement = newCard.querySelector('.kanban-card-title');
         titleElement.focus();
         
+        // Select all text in the element
+        setTimeout(() => {
+            if (window.getSelection && document.createRange) {
+                const range = document.createRange();
+                range.selectNodeContents(titleElement);
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+        }, 10);
+        
         saveChanges(board.id, false, 'add_card');
+    }
+
+    /**
+     * Edit a card with modal
+     */
+    function editCard(cardId) {
+        const card = document.getElementById(cardId);
+        if (!card) return;
+        
+        const board = card.closest('.kanban-board');
+        const cardData = extractCardData(card);
+        
+        showCardModal(cardData, function(updatedData) {
+            updateCardDisplay(card, updatedData);
+            saveChanges(board.id, false, 'edit_card');
+        });
+    }
+
+    /**
+     * Extract card data from DOM element
+     */
+    function extractCardData(cardElement) {
+        const titleElement = cardElement.querySelector('.kanban-card-title');
+        const descElement = cardElement.querySelector('.kanban-card-description');
+        const creatorElement = cardElement.querySelector('.kanban-card-creator span');
+        const dateElement = cardElement.querySelector('.kanban-card-date');
+        const tagElements = cardElement.querySelectorAll('.kanban-tag');
+        
+        return {
+            id: cardElement.id,
+            title: titleElement ? titleElement.textContent.trim() : '',
+            description: descElement ? descElement.textContent.trim() : '',
+            priority: cardElement.className.match(/priority-(\w+)/)?.[1] || 'normal',
+            assignee: '', // À extraire selon le format
+            creator: creatorElement ? creatorElement.textContent.trim() : '',
+            created: dateElement ? dateElement.textContent.trim() : '',
+            tags: Array.from(tagElements).map(tag => tag.textContent.trim())
+        };
+    }
+
+    /**
+     * Show card editing modal
+     */
+    function showCardModal(cardData, onSave) {
+        // Create modal HTML
+        const modal = document.createElement('div');
+        modal.className = 'kanban-modal';
+        modal.innerHTML = `
+            <div class="kanban-modal-content">
+                <div class="kanban-modal-header">
+                    <h3>Éditer la carte</h3>
+                    <button class="kanban-modal-close" type="button">×</button>
+                </div>
+                
+                <div class="kanban-modal-field">
+                    <label for="card-title">Titre *</label>
+                    <input type="text" id="card-title" value="${escapeHtml(cardData.title)}" required>
+                </div>
+                
+                <div class="kanban-modal-field">
+                    <label for="card-description">Description</label>
+                    <textarea id="card-description" placeholder="Description de la carte...">${escapeHtml(cardData.description)}</textarea>
+                </div>
+                
+                <div class="kanban-modal-field">
+                    <label for="card-priority">Priorité</label>
+                    <select id="card-priority">
+                        <option value="low" ${cardData.priority === 'low' ? 'selected' : ''}>Faible</option>
+                        <option value="normal" ${cardData.priority === 'normal' ? 'selected' : ''}>Normale</option>
+                        <option value="medium" ${cardData.priority === 'medium' ? 'selected' : ''}>Moyenne</option>
+                        <option value="high" ${cardData.priority === 'high' ? 'selected' : ''}>Élevée</option>
+                    </select>
+                </div>
+                
+                <div class="kanban-modal-field">
+                    <label for="card-assignee">Assigné à</label>
+                    <input type="text" id="card-assignee" value="${escapeHtml(cardData.assignee)}" placeholder="Nom d'utilisateur">
+                </div>
+                
+                <div class="kanban-modal-field">
+                    <label for="card-tags">Tags</label>
+                    <input type="text" id="card-tags" value="${cardData.tags.join(', ')}" placeholder="Tag1, Tag2, Tag3">
+                    <div class="kanban-modal-tags" id="card-tags-display"></div>
+                </div>
+                
+                <div class="kanban-modal-field">
+                    <label>Créé par</label>
+                    <div>${escapeHtml(cardData.creator)} le ${escapeHtml(cardData.created)}</div>
+                </div>
+                
+                <div class="kanban-modal-actions">
+                    <button class="kanban-modal-btn kanban-modal-btn-danger" type="button" id="delete-card-btn">
+                        Supprimer
+                    </button>
+                    <button class="kanban-modal-btn kanban-modal-btn-secondary" type="button" id="cancel-btn">
+                        Annuler
+                    </button>
+                    <button class="kanban-modal-btn kanban-modal-btn-primary" type="button" id="save-btn">
+                        Sauvegarder
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Focus on title
+        const titleInput = modal.querySelector('#card-title');
+        titleInput.focus();
+        titleInput.select();
+        
+        // Update tags display
+        updateTagsDisplay();
+        
+        // Event listeners
+        modal.querySelector('.kanban-modal-close').addEventListener('click', closeModal);
+        modal.querySelector('#cancel-btn').addEventListener('click', closeModal);
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) closeModal();
+        });
+        
+        modal.querySelector('#card-tags').addEventListener('input', updateTagsDisplay);
+        
+        modal.querySelector('#save-btn').addEventListener('click', function() {
+            const updatedData = {
+                ...cardData,
+                title: modal.querySelector('#card-title').value.trim(),
+                description: modal.querySelector('#card-description').value.trim(),
+                priority: modal.querySelector('#card-priority').value,
+                assignee: modal.querySelector('#card-assignee').value.trim(),
+                tags: modal.querySelector('#card-tags').value.split(',').map(tag => tag.trim()).filter(tag => tag)
+            };
+            
+            if (!updatedData.title) {
+                alert('Le titre est obligatoire !');
+                return;
+            }
+            
+            onSave(updatedData);
+            closeModal();
+        });
+        
+        modal.querySelector('#delete-card-btn').addEventListener('click', function() {
+            if (confirm('Êtes-vous sûr de vouloir supprimer cette carte ?')) {
+                deleteCard(cardData.id);
+                closeModal();
+            }
+        });
+        
+        function updateTagsDisplay() {
+            const tagsInput = modal.querySelector('#card-tags');
+            const tagsDisplay = modal.querySelector('#card-tags-display');
+            const tags = tagsInput.value.split(',').map(tag => tag.trim()).filter(tag => tag);
+            
+            tagsDisplay.innerHTML = tags.map(tag => 
+                `<div class="kanban-modal-tag">
+                    ${escapeHtml(tag)}
+                    <button type="button" onclick="this.parentElement.remove(); updateTagsInput();">×</button>
+                </div>`
+            ).join('');
+        }
+        
+        function closeModal() {
+            document.body.removeChild(modal);
+        }
+        
+        // Handle Escape key
+        function handleEscape(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        }
+        document.addEventListener('keydown', handleEscape);
+    }
+
+    /**
+     * Update card display with new data
+     */
+    function updateCardDisplay(cardElement, cardData) {
+        // Update classes
+        cardElement.className = cardElement.className.replace(/priority-\w+/, `priority-${cardData.priority}`);
+        
+        // Update title
+        const titleElement = cardElement.querySelector('.kanban-card-title');
+        if (titleElement) {
+            titleElement.textContent = cardData.title;
+        }
+        
+        // Update description
+        let descElement = cardElement.querySelector('.kanban-card-description');
+        if (cardData.description) {
+            if (!descElement) {
+                descElement = document.createElement('div');
+                descElement.className = 'kanban-card-description';
+                cardElement.querySelector('.kanban-card-header').after(descElement);
+            }
+            descElement.textContent = cardData.description;
+        } else if (descElement) {
+            descElement.remove();
+        }
+        
+        // Update footer with tags, priority, assignee
+        updateCardFooter(cardElement, cardData);
+    }
+
+    /**
+     * Update card footer with metadata
+     */
+    function updateCardFooter(cardElement, cardData) {
+        let footer = cardElement.querySelector('.kanban-card-footer');
+        if (!footer) {
+            footer = document.createElement('div');
+            footer.className = 'kanban-card-footer';
+            cardElement.appendChild(footer);
+        }
+        
+        footer.innerHTML = '';
+        
+        // Priority
+        if (cardData.priority !== 'normal') {
+            footer.innerHTML += `<span class="kanban-priority">${escapeHtml(cardData.priority)}</span>`;
+        }
+        
+        // Assignee
+        if (cardData.assignee) {
+            footer.innerHTML += `<span class="kanban-assignee">${escapeHtml(cardData.assignee)}</span>`;
+        }
+        
+        // Tags
+        cardData.tags.forEach(tag => {
+            footer.innerHTML += `<span class="kanban-tag">${escapeHtml(tag)}</span>`;
+        });
+    }
+
+    /**
+     * Escape HTML to prevent XSS
+     */
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     /**
@@ -473,6 +726,7 @@ window.KanbanPlugin = (function() {
         init: init,
         addColumn: addColumn,
         addCard: addCard,
+        editCard: editCard,
         deleteColumn: deleteColumn,
         deleteCard: deleteCard
     };

@@ -274,14 +274,33 @@ class syntax_plugin_kanban extends SyntaxPlugin
         $cardId = $card['id'];
         $priorityClass = 'priority-' . $card['priority'];
         
+        // Get current user info
+        global $INFO;
+        $currentUser = $INFO['userinfo']['name'] ?? $INFO['client'] ?? 'Anonyme';
+        
+        // Set default values for new fields
+        $card['description'] = $card['description'] ?? '';
+        $card['creator'] = $card['creator'] ?? $currentUser;
+        $card['created'] = $card['created'] ?? date('Y-m-d H:i:s');
+        $card['assignee'] = $card['assignee'] ?? '';
+        $card['tags'] = $card['tags'] ?? [];
+        
         $renderer->doc .= '<div class="kanban-card ' . $priorityClass . '" id="' . $cardId . '" draggable="true">';
-        $renderer->doc .= '<div class="kanban-card-header">';
-        $renderer->doc .= '<h4 class="kanban-card-title" contenteditable="true">' . htmlspecialchars($card['title']) . '</h4>';
-        $renderer->doc .= '<button class="kanban-card-delete" onclick="KanbanPlugin.deleteCard(\'' . $cardId . '\')" title="Supprimer">×</button>';
+        
+        // Card actions (edit/delete)
+        $renderer->doc .= '<div class="kanban-card-actions">';
+        $renderer->doc .= '<button onclick="KanbanPlugin.editCard(\'' . $cardId . '\')" title="Éditer">✏️</button>';
+        $renderer->doc .= '<button onclick="KanbanPlugin.deleteCard(\'' . $cardId . '\')" title="Supprimer">×</button>';
         $renderer->doc .= '</div>';
         
+        // Card content
+        $renderer->doc .= '<div class="kanban-card-header">';
+        $renderer->doc .= '<h4 class="kanban-card-title" contenteditable="true">' . htmlspecialchars($card['title']) . '</h4>';
+        $renderer->doc .= '</div>';
+        
+        // Description
         if (!empty($card['description'])) {
-            $renderer->doc .= '<div class="kanban-card-description" contenteditable="true">' . htmlspecialchars($card['description']) . '</div>';
+            $renderer->doc .= '<div class="kanban-card-description">' . htmlspecialchars($card['description']) . '</div>';
         }
         
         $renderer->doc .= '<div class="kanban-card-footer">';
@@ -303,8 +322,25 @@ class syntax_plugin_kanban extends SyntaxPlugin
             }
         }
         
+        $renderer->doc .= '</div>'; // Close kanban-card-footer
+        
+        // Card metadata
+        $renderer->doc .= '<div class="kanban-card-meta">';
+        
+        // Creator with avatar
+        $renderer->doc .= '<div class="kanban-card-creator">';
+        $creatorInitial = strtoupper(substr($card['creator'], 0, 1));
+        $renderer->doc .= '<div class="kanban-card-avatar">' . $creatorInitial . '</div>';
+        $renderer->doc .= '<span>' . htmlspecialchars($card['creator']) . '</span>';
         $renderer->doc .= '</div>';
-        $renderer->doc .= '</div>';
+        
+        // Created date
+        $createdDate = date('d/m/Y', strtotime($card['created']));
+        $renderer->doc .= '<div class="kanban-card-date">' . $createdDate . '</div>';
+        
+        $renderer->doc .= '</div>'; // Close kanban-card-meta
+        
+        $renderer->doc .= '</div>'; // Close kanban-card
     }
 
     /**
