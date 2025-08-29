@@ -202,8 +202,6 @@ class syntax_plugin_kanban extends SyntaxPlugin
      */
     private function renderKanbanContent($renderer, $columns)
     {
-        global $INFO;
-        
         // Convertir les données en JSON pour JavaScript
         $boardData = array(
             'title' => '',  // Sera récupéré depuis data-title
@@ -214,27 +212,6 @@ class syntax_plugin_kanban extends SyntaxPlugin
         
         // Container pour les données JSON (lu par JavaScript)
         $renderer->doc .= '<script type="application/json" class="kanban-data">' . $jsonData . '</script>';
-        
-        // Ajouter les informations utilisateur pour le système de verrouillage
-        // Utiliser la même logique que dans action.php
-        $currentUser = 'Utilisateur';
-        
-        if (!empty($INFO['userinfo']['name'])) {
-            $currentUser = $INFO['userinfo']['name'];
-        } elseif (!empty($INFO['userinfo']['mail'])) {
-            $currentUser = $INFO['userinfo']['mail'];
-        }
-        
-        $pageId = $INFO['id'] ?? '';
-        
-        // Debug logging pour comprendre la structure de $INFO
-        error_log("Kanban Debug - syntax.php: currentUser=" . var_export($currentUser, true) . ", INFO structure=" . print_r($INFO, true));
-        
-        $renderer->doc .= '<script type="text/javascript">';
-        $renderer->doc .= 'if (typeof JSINFO === "undefined") JSINFO = {};';
-        $renderer->doc .= 'JSINFO.kanban_user = ' . json_encode($currentUser) . ';';
-        $renderer->doc .= 'JSINFO.kanban_page_id = ' . json_encode($pageId) . ';';
-        $renderer->doc .= '</script>';
         
         // Container vide pour le contenu généré par JavaScript
         $renderer->doc .= '<div class="kanban-content-container" data-loading="true">';

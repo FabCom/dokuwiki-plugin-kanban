@@ -218,6 +218,15 @@ class action_plugin_kanban extends ActionPlugin
                 case 'load_board':
                     $this->loadBoardData();
                     break;
+                case 'lock_board':
+                    $this->lockBoard();
+                    break;
+                case 'unlock_board':
+                    $this->unlockBoard();
+                    break;
+                case 'check_lock':
+                    $this->checkBoardLock();
+                    break;
                 default:
                     http_response_code(400);
                     echo json_encode(['error' => 'Action non reconnue']);
@@ -600,5 +609,156 @@ class action_plugin_kanban extends ActionPlugin
         
         $content = rawWiki($ID);
         return strpos($content, '<kanban') !== false;
+    }
+
+    /**
+     * Lock a kanban board for editing
+     */
+    private function lockBoard()
+    {
+        global $INPUT, $INFO, $ID, $USERINFO;
+        
+        $pageId = $INPUT->str('page_id');
+        if (empty($pageId)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'ID de page manquant']);
+            return;
+        }
+        
+        // Sauvegarder l'ID actuel et utiliser l'ID de la page kanban
+        $originalID = $ID;
+        $ID = $pageId;
+        
+        // Vérifier les permissions d'écriture
+        $pageInfo = pageinfo();
+        if (!$pageInfo['writable']) {
+            $ID = $originalID; // Restaurer l'ID original
+            http_response_code(403);
+            echo json_encode(['error' => 'Permission d\'écriture refusée']);
+            return;
+        }
+        
+        // Vérifier si déjà verrouillé
+        $lockedBy = checklock($pageId);
+        if ($lockedBy) {
+            $ID = $originalID; // Restaurer l'ID original
+            http_response_code(409);
+            echo json_encode([
+                'error' => 'Page déjà verrouillée',
+                'locked_by' => $lockedBy,
+                'locked' => true
+            ]);
+            return;
+        }
+        
+        // Verrouiller la page
+        lock($pageId);
+        
+        // Vérifier immédiatement si le verrouillage a fonctionné
+        $lockedBy = checklock($pageId);
+        
+        // Debug logging
+        error_log("Kanban Debug - lockBoard: pageId=$pageId, après lock() lockedBy=" . var_export($lockedBy, true));
+        
+        // Si le verrouillage natif ne fonctionne pas, utiliser une approche alternative
+        if (!$lockedBy) {
+            // Utiliser la même structure que DokuWiki pour le nom d'utilisateur
+            // Examiner $INFO pour voir ce qui est disponible
+            $currentUser = 'Utilisateur';
+            
+            if (!empty($INFO['userinfo']['name'])) {
+                $currentUser = $INFO['userinfo']['name'];
+            } elseif (!empty($INFO['userinfo']['mail'])) {
+                $currentUser = $INFO['userinfo']['mail'];
+            }
+            
+            error_log("Kanban Debug - lockBoard: INFO structure = " . print_r($INFO, true));
+            
+            // Créer notre propre fichier de verrouillage
+            $lockDir = DOKU_INC . 'data/locks/';
+            if (!is_dir($lockDir)) {
+                mkdir($lockDir, 0755, true);
+            }
+            $lockFile = $lockDir . str_replace(':', '_', $pageId) . '.kanban.lock';
+            file_put_contents($lockFile, $currentUser);
+            
+            $lockedBy = $currentUser;
+            error_log("Kanban Debug - lockBoard: Utilisation système alternatif, currentUser=" . var_export($currentUser, true));
+        }
+        
+        // Restaurer l'ID original
+        $ID = $originalID;
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'Board verrouillé pour édition',
+            'locked' => true,
+            'locked_by' => $lockedBy
+        ]);
+    }
+
+    /**
+     * Unlock a kanban board
+     */
+    private function unlockBoard()
+    {
+        global $INPUT;
+        
+        $pageId = $INPUT->str('page_id');
+        if (empty($pageId)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'ID de page manquant']);
+            return;
+        }
+        
+        // Déverrouiller la page
+        $unlocked = unlock($pageId);
+        
+        // Supprimer aussi notre fichier backup si il existe
+        $lockFile = DOKU_INC . 'data/locks/' . str_replace(':', '_', $pageId) . '.kanban.lock';
+        if (file_exists($lockFile)) {
+            unlink($lockFile);
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'message' => $unlocked ? 'Board déverrouillé' : 'Aucun verrou à supprimer',
+            'locked' => false,
+            'unlocked' => $unlocked
+        ]);
+    }
+
+    /**
+     * Check if a kanban board is locked
+     */
+    private function checkBoardLock()
+    {
+        global $INPUT, $INFO;
+        
+        $pageId = $INPUT->str('page_id');
+        if (empty($pageId)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'ID de page manquant']);
+            return;
+        }
+        
+        $lockedBy = checklock($pageId);
+        
+        // Si le verrouillage DokuWiki ne retourne rien, vérifier notre fichier backup
+        if (!$lockedBy) {
+            $lockFile = DOKU_INC . 'data/locks/' . str_replace(':', '_', $pageId) . '.kanban.lock';
+            if (file_exists($lockFile)) {
+                $lockedBy = file_get_contents($lockFile);
+            }
+        }
+        
+        // Debug logging
+        error_log("Kanban Debug - checkBoardLock: pageId=$pageId, lockedBy=" . var_export($lockedBy, true));
+        
+        echo json_encode([
+            'locked' => (bool)$lockedBy,
+            'locked_by' => $lockedBy ?: null,
+            'page_id' => $pageId
+        ]);
     }
 }
