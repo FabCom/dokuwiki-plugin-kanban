@@ -116,9 +116,26 @@
     function renderCard(cardData) {
         const priorityClass = `priority-${cardData.priority || 'normal'}`;
         
+        // Préparer les tooltips pour les icônes
+        let creatorTooltip = '';
+        let modifierTooltip = '';
+        
+        if (cardData.creator) {
+            const createdDate = cardData.created ? formatDate(cardData.created) : '';
+            creatorTooltip = `Créé par ${cardData.creator}${createdDate ? ' le ' + createdDate : ''}`;
+        }
+        
+        if (cardData.lastModifiedBy && cardData.lastModified && 
+            cardData.lastModified !== cardData.created) {
+            const modifiedDate = formatDate(cardData.lastModified);
+            modifierTooltip = `Modifié par ${cardData.lastModifiedBy} le ${modifiedDate}`;
+        }
+        
         let html = `
             <div class="kanban-card ${priorityClass}" id="${cardData.id}" draggable="true">
                 <div class="kanban-card-actions">
+                    ${creatorTooltip ? `<span class="kanban-info-icon kanban-creator-icon kanban-tooltip" title="${creatorTooltip}">🏗️</span>` : ''}
+                    ${modifierTooltip ? `<span class="kanban-info-icon kanban-modifier-icon kanban-tooltip" title="${modifierTooltip}">🔧</span>` : ''}
                     <button onclick="KanbanPlugin.editCard('${cardData.id}')" title="Éditer">✏️</button>
                     <button onclick="KanbanPlugin.deleteCard('${cardData.id}')" title="Supprimer">×</button>
                 </div>`;
@@ -139,19 +156,6 @@
                     <h4 class="kanban-card-title" contenteditable="true">${escapeHtml(cardData.title)}</h4>
                 </div>`;
         
-        // Créateur sous le titre
-        if (cardData.creator) {
-            html += `<div class="kanban-card-creator">`;
-            const creatorInitial = cardData.creator.charAt(0).toUpperCase();
-            html += `<div class="kanban-card-avatar">${creatorInitial}</div>`;
-            html += `<span>Par ${escapeHtml(cardData.creator)}</span>`;
-            if (cardData.created) {
-                const createdDate = formatDate(cardData.created);
-                html += `<span class="kanban-card-date"> • ${createdDate}</span>`;
-            }
-            html += `</div>`;
-        }
-        
         // Description
         if (cardData.description) {
             html += `<div class="kanban-card-description">${escapeHtml(cardData.description)}</div>`;
@@ -165,19 +169,12 @@
             html += `</div>`;
         }
         
-        // Footer avec assignee et modificateur
+        // Footer avec assignee seulement
         html += `<div class="kanban-card-footer">`;
         
         // Assignee
         if (cardData.assignee) {
             html += `<span class="kanban-assignee">👤 ${escapeHtml(cardData.assignee)}</span>`;
-        }
-        
-        // Last modified info dans le footer
-        if (cardData.lastModifiedBy && cardData.lastModified && 
-            cardData.lastModified !== cardData.created) {
-            const modifiedDate = formatDate(cardData.lastModified);
-            html += `<span class="kanban-last-modified">✏️ ${escapeHtml(cardData.lastModifiedBy)} • ${modifiedDate}</span>`;
         }
         
         html += `</div>`; // Close footer
@@ -711,44 +708,60 @@
                 </div>
                 <div class="kanban-modal-body">
                     <form class="kanban-card-form">
-                        <div class="form-group">
-                            <label for="card-title">Titre:</label>
-                            <input type="text" id="card-title" name="title" value="${escapeHtml(cardData.title)}" required>
+                        <!-- Section: Informations principales -->
+                        <div class="kanban-modal-section">
+                            <h4 class="kanban-modal-section-title">📝 Informations principales</h4>
+                            <div class="form-group">
+                                <label for="card-title">Titre *</label>
+                                <input type="text" id="card-title" name="title" value="${escapeHtml(cardData.title)}" 
+                                       required placeholder="Titre de la carte...">
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="card-description">Description</label>
+                                <textarea id="card-description" name="description" rows="3" 
+                                          placeholder="Descritpion...">${escapeHtml(cardData.description || '')}</textarea>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="card-tags">🏷️ Tags (séparés par des virgules)</label>
+                                <input type="text" id="card-tags" name="tags" 
+                                       value="${cardData.tags ? cardData.tags.join(', ') : ''}"
+                                       placeholder="tag1, tag2, ...">
+                            </div>
                         </div>
-                        
-                        <div class="form-group">
-                            <label for="card-description">Description:</label>
-                            <textarea id="card-description" name="description" rows="3">${escapeHtml(cardData.description || '')}</textarea>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="card-priority">Priorité:</label>
-                            <select id="card-priority" name="priority">
-                                <option value="low" ${cardData.priority === 'low' ? 'selected' : ''}>Basse</option>
-                                <option value="normal" ${cardData.priority === 'normal' ? 'selected' : ''}>Normale</option>
-                                <option value="medium" ${cardData.priority === 'medium' ? 'selected' : ''}>Moyenne</option>
-                                <option value="high" ${cardData.priority === 'high' ? 'selected' : ''}>Haute</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="card-assignee">Assigné à:</label>
-                            <input type="text" id="card-assignee" name="assignee" value="${escapeHtml(cardData.assignee || '')}">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="card-due-date">Date d'échéance:</label>
-                            <input type="date" id="card-due-date" name="dueDate" value="${cardData.dueDate || ''}">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="card-tags">Tags (séparés par des virgules):</label>
-                            <input type="text" id="card-tags" name="tags" value="${cardData.tags ? cardData.tags.join(', ') : ''}">
+
+                        <!-- Section: Organisation -->
+                        <div class="kanban-modal-section">
+                            <h4 class="kanban-modal-section-title">🎯 Organisation</h4>
+                            <div class="form-group-row">
+                                <div class="form-group form-group-half">
+                                    <label for="card-priority">Priorité</label>
+                                    <select id="card-priority" name="priority">
+                                        <option value="low" ${cardData.priority === 'low' ? 'selected' : ''}>🟢 Basse</option>
+                                        <option value="normal" ${cardData.priority === 'normal' ? 'selected' : ''}>⚪ Normale</option>
+                                        <option value="medium" ${cardData.priority === 'medium' ? 'selected' : ''}>🟡 Moyenne</option>
+                                        <option value="high" ${cardData.priority === 'high' ? 'selected' : ''}>🔴 Haute</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group form-group-half">
+                                    <label for="card-assignee">👤 Assigné à</label>
+                                    <input type="text" id="card-assignee" name="assignee" 
+                                           value="${escapeHtml(cardData.assignee || '')}" 
+                                           placeholder="@utilisateur">
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="card-due-date">📅 Date d'échéance</label>
+                                <input type="date" id="card-due-date" name="dueDate" value="${cardData.dueDate || ''}">
+                            </div>
                         </div>
                         
                         <div class="form-actions">
-                            <button type="submit" class="kanban-btn kanban-btn-primary">Sauvegarder</button>
-                            <button type="button" class="kanban-btn kanban-btn-secondary kanban-modal-cancel">Annuler</button>
+                            <button type="submit" class="kanban-btn kanban-btn-primary">💾 Sauvegarder</button>
+                            <button type="button" class="kanban-btn kanban-btn-secondary kanban-modal-cancel">❌ Annuler</button>
                         </div>
                     </form>
                 </div>
@@ -954,6 +967,40 @@
     }
 
     // Auto-unlock on page unload
+    // Smart tooltip positioning
+    function initializeSmartTooltips() {
+        document.addEventListener('mouseover', function(e) {
+            if (e.target.classList.contains('kanban-tooltip')) {
+                const tooltip = e.target;
+                setTimeout(() => {
+                    const tooltipRect = tooltip.getBoundingClientRect();
+                    const viewportWidth = window.innerWidth;
+                    const column = tooltip.closest('.kanban-column');
+                    
+                    if (column) {
+                        const columnRect = column.getBoundingClientRect();
+                        const isFirstColumn = column.previousElementSibling === null;
+                        const isLastColumn = column.nextElementSibling === null;
+                        
+                        // Ajouter des classes pour le positionnement CSS
+                        tooltip.classList.remove('tooltip-left', 'tooltip-right', 'tooltip-center');
+                        
+                        if (isFirstColumn) {
+                            tooltip.classList.add('tooltip-left');
+                        } else if (isLastColumn) {
+                            tooltip.classList.add('tooltip-right');
+                        } else {
+                            tooltip.classList.add('tooltip-center');
+                        }
+                    }
+                }, 10);
+            }
+        });
+    }
+
+    // Initialize smart tooltips
+    initializeSmartTooltips();
+
     window.addEventListener('beforeunload', function() {
         Object.keys(kanbanBoards).forEach(boardId => {
             const board = document.getElementById(boardId);
