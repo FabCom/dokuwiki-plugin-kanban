@@ -15,59 +15,66 @@ window.KanbanPlugin = (function() {
      * Get current user name from DokuWiki
      */
     function getCurrentUser() {
-        // Try the new kanban-specific JSINFO first
+        // Priority 1: Try the kanban-specific JSINFO (most reliable)
         if (window.JSINFO && JSINFO.kanban_user && JSINFO.kanban_user !== 'Anonyme') {
-            console.log('👤 Utilisateur détecté via JSINFO:', JSINFO.kanban_user);
+            console.log('👤 Utilisateur détecté via JSINFO.kanban_user:', JSINFO.kanban_user);
             return JSINFO.kanban_user;
         }
         
-        // Try multiple sources for user info
-        if (window.JSINFO && JSINFO.user) {
+        // Priority 2: Try meta tag injected by PHP
+        const metaKanbanUser = document.querySelector('meta[name="kanban-user"]');
+        if (metaKanbanUser && metaKanbanUser.content && metaKanbanUser.content !== 'Anonyme') {
+            console.log('👤 Utilisateur détecté via meta kanban-user:', metaKanbanUser.content);
+            return metaKanbanUser.content;
+        }
+        
+        // Priority 3: Try standard DokuWiki user variables
+        if (window.JSINFO && JSINFO.user && JSINFO.user !== '' && JSINFO.user !== 'Anonyme') {
             console.log('👤 Utilisateur détecté via JSINFO.user:', JSINFO.user);
             return JSINFO.user;
         }
         
-        // Try to get from DokuWiki global
-        if (window.dw && dw.user) {
+        // Priority 4: Try other globals
+        if (window.dw && dw.user && dw.user !== '' && dw.user !== 'Anonyme') {
             console.log('👤 Utilisateur détecté via dw.user:', dw.user);
             return dw.user;
         }
         
-        // Try to get from global INFO
-        if (window.INFO && INFO.user) {
+        if (window.INFO && INFO.user && INFO.user !== '' && INFO.user !== 'Anonyme') {
             console.log('👤 Utilisateur détecté via INFO.user:', INFO.user);
             return INFO.user;
         }
         
-        // Try to get from meta tag
+        // Priority 5: Standard meta tag
         const metaUser = document.querySelector('meta[name="user"]');
-        if (metaUser && metaUser.content) {
-            console.log('👤 Utilisateur détecté via meta:', metaUser.content);
+        if (metaUser && metaUser.content && metaUser.content !== 'Anonyme') {
+            console.log('👤 Utilisateur détecté via meta user:', metaUser.content);
             return metaUser.content;
         }
         
-        // Try to get from body class or data attributes
-        const bodyClass = document.body.className.match(/user-(\w+)/);
-        if (bodyClass) {
-            console.log('👤 Utilisateur détecté via body class:', bodyClass[1]);
-            return bodyClass[1];
+        // Debug plus détaillé
+        const debugInfo = {
+            JSINFO_exists: typeof window.JSINFO !== 'undefined',
+            JSINFO_kanban_user: window.JSINFO?.kanban_user,
+            JSINFO_user: window.JSINFO?.user,
+            JSINFO_id: window.JSINFO?.id,
+            JSINFO_client: window.JSINFO?.client,
+            JSINFO_debug: window.JSINFO?.kanban_debug,
+            meta_kanban_user: document.querySelector('meta[name="kanban-user"]')?.content,
+            meta_user: document.querySelector('meta[name="user"]')?.content,
+            all_metas: Array.from(document.querySelectorAll('meta')).map(m => ({name: m.name, content: m.content})),
+            full_JSINFO: window.JSINFO
+        };
+        
+        console.log('⚠️ Aucun utilisateur détecté - Debug Info:', debugInfo);
+        
+        // Affichage visible pour debug
+        if (window.console && console.warn) {
+            console.warn('🚨 KANBAN: Utilisateur non détecté, utilisation du fallback');
         }
         
-        // Try to get from page content (search for "logged in as")
-        const userLinks = document.querySelectorAll('a[href*="do=profile"], a[title*="Profile"]');
-        for (let link of userLinks) {
-            if (link.textContent && link.textContent.trim() !== 'Login') {
-                console.log('👤 Utilisateur détecté via lien profil:', link.textContent.trim());
-                return link.textContent.trim();
-            }
-        }
-        
-        console.log('⚠️ Aucun utilisateur détecté, JSINFO disponible:', {
-            JSINFO: window.JSINFO,
-            kanban_debug: window.JSINFO?.kanban_debug
-        });
-        
-        return 'Anonyme';
+        // En dernier recours, utiliser un nom par défaut plutôt que "Inconnu"
+        return 'Utilisateur';
     }
 
     /**
@@ -81,7 +88,9 @@ window.KanbanPlugin = (function() {
      * Get current date in French format for display
      */
     function getCurrentDate() {
-        return new Date().toLocaleDateString('fr-FR');
+        const now = new Date();
+        const timestamp = now.getTime();
+        return now.toLocaleDateString('fr-FR') + ' ' + now.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'});
     }
 
     /**
@@ -497,7 +506,7 @@ window.KanbanPlugin = (function() {
             assignee: '',
             tags: [],
             creator: currentUser,
-            created: currentDateTime
+            created: currentDateTime  // Garde le format ISO: "2025-08-29 09:04:33"
             // Note: pas de lastModified car c'est une création, pas une modification
         };
         
@@ -586,15 +595,15 @@ window.KanbanPlugin = (function() {
                 html += `<div class="kanban-card-date">${createdDate}</div>`;
             }
             
-            // Last modified info
-            if (cardData.lastModifiedBy || cardData.lastModified) {
+            // Last modified info - only show if actually modified
+            if (cardData.lastModifiedBy && cardData.lastModified && 
+                cardData.lastModified !== cardData.created) {
                 html += `<div class="kanban-last-modified">`;
-                if (cardData.lastModifiedBy) {
-                    html += `<span class="modified-by">Modifié par ${escapeHtml(cardData.lastModifiedBy)}</span>`;
-                }
-                if (cardData.lastModified) {
-                    const modifiedDate = new Date(cardData.lastModified).toLocaleDateString('fr-FR');
-                    html += `<span class="modified-date"> le ${modifiedDate}</span>`;
+                html += `<span class="modified-by">Modifié par ${escapeHtml(cardData.lastModifiedBy)}</span>`;
+                
+                const modifiedDate = new Date(cardData.lastModified);
+                if (!isNaN(modifiedDate.getTime())) {
+                    html += `<span class="modified-date"> le ${modifiedDate.toLocaleDateString('fr-FR')}</span>`;
                 }
                 html += `</div>`;
             }
@@ -764,10 +773,23 @@ window.KanbanPlugin = (function() {
                 priority: modal.querySelector('#card-priority').value,
                 assignee: modal.querySelector('#card-assignee').value.trim(),
                 dueDate: modal.querySelector('#card-due-date').value.trim(),
-                tags: modal.querySelector('#card-tags').value.split(',').map(tag => tag.trim()).filter(tag => tag),
-                lastModifiedBy: getCurrentUser(),
-                lastModified: getCurrentDate()
+                tags: modal.querySelector('#card-tags').value.split(',').map(tag => tag.trim()).filter(tag => tag)
             };
+            
+            // Only add lastModified info if this is actually a modification (not creation)
+            // Check if card already exists in DOM (meaning it's an edit, not creation)
+            const existingCard = document.getElementById(cardData.id);
+            if (existingCard) {
+                // This is an existing card being edited
+                const currentUser = getCurrentUser();
+                // Make sure we only store the clean username, not "Modifié par xxx"
+                updatedData.lastModifiedBy = currentUser.replace(/^Modifié par\s+/, '');
+                updatedData.lastModified = getCurrentDate();
+                console.log('✏️ Modification carte existante:', updatedData);
+            } else {
+                // This is a new card creation - don't add lastModified
+                console.log('🆕 Nouvelle carte créée:', updatedData);
+            }
             
             console.log('📝 Données de la modal avant sauvegarde:', updatedData);
             
@@ -1249,7 +1271,20 @@ window.KanbanPlugin = (function() {
         addCard: addCard,
         editCard: editCard,
         deleteColumn: deleteColumn,
-        deleteCard: deleteCard
+        deleteCard: deleteCard,
+        
+        // Debug functions
+        getCurrentUser: getCurrentUser,
+        debugUserDetection: function() {
+            const user = getCurrentUser();
+            console.log('🔍 Debug détection utilisateur:', {
+                detected: user,
+                JSINFO: window.JSINFO,
+                meta_kanban: document.querySelector('meta[name="kanban-user"]')?.content
+            });
+            alert(`Utilisateur détecté: ${user}\nVoir console pour détails`);
+            return user;
+        }
     };
 
 })();

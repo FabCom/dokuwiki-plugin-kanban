@@ -348,9 +348,28 @@ class syntax_plugin_kanban extends SyntaxPlugin
         $renderer->doc .= '<span>' . htmlspecialchars($card['creator']) . '</span>';
         $renderer->doc .= '</div>';
         
-        // Created date
-        $createdDate = date('d/m/Y', strtotime($card['created']));
+        // Created date - handle different date formats
+        $createdDate = $card['created'];
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $createdDate)) {
+            // ISO format: 2025-08-29 or 2025-08-29 09:04:33
+            $createdDate = date('d/m/Y', strtotime($createdDate));
+        } elseif (!preg_match('/^\d{2}\/\d{2}\/\d{4}/', $createdDate)) {
+            // Not in dd/mm/yyyy format, fallback to current date
+            $createdDate = date('d/m/Y');
+        }
+        // If already in dd/mm/yyyy format, keep as-is
         $renderer->doc .= '<div class="kanban-card-date">' . $createdDate . '</div>';
+        
+        // Last modified info - only show if actually modified
+        // Show if lastModifiedBy exists (meaning it was modified at least once)
+        if (!empty($card['lastModifiedBy']) && !empty($card['lastModified'])) {
+            $renderer->doc .= '<div class="kanban-last-modified">';
+            $renderer->doc .= '<span class="modified-by">Modifié par ' . htmlspecialchars($card['lastModifiedBy']) . '</span>';
+            
+            $modifiedDate = $card['lastModified'];
+            $renderer->doc .= '<span class="modified-date"> le ' . htmlspecialchars($modifiedDate) . '</span>';
+            $renderer->doc .= '</div>';
+        }
         
         $renderer->doc .= '</div>'; // Close kanban-card-meta
         

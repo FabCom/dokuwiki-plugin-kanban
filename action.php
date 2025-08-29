@@ -22,6 +22,8 @@ class action_plugin_kanban extends ActionPlugin
     {
         $controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, 'addAssets');
         $controller->register_hook('AJAX_CALL_UNKNOWN', 'BEFORE', $this, 'handleAjax');
+        // Ajouter user info AVANT TPL_METAHEADER_OUTPUT
+        $controller->register_hook('DOKUWIKI_STARTED', 'AFTER', $this, 'addUserInfoToJSINFO');
     }
 
     /**
@@ -47,16 +49,15 @@ class action_plugin_kanban extends ActionPlugin
             'src' => DOKU_BASE . 'lib/plugins/kanban/script.js'
         ];
         
-        // Add user info to JSINFO for proper user identification
-        $this->addUserInfoToJSINFO();
+        // User info est ajouté via DOKUWIKI_STARTED hook
     }
     
     /**
-     * Add user information to JSINFO
+     * Add user information to JSINFO for frontend access
      */
-    private function addUserInfoToJSINFO()
+    public function addUserInfoToJSINFO(Event $event, $param)
     {
-        global $JSINFO, $INFO, $conf;
+        global $JSINFO, $INFO, $conf, $ACT;
         
         // Ensure JSINFO array exists
         if (!is_array($JSINFO)) {
@@ -69,40 +70,124 @@ class action_plugin_kanban extends ActionPlugin
         $userName = '';
         $userMail = '';
         
-        // Check if user is logged in
-        if (isset($INFO['userinfo']) && is_array($INFO['userinfo'])) {
-            $currentUser = $INFO['userinfo']['name'] ?? $INFO['client'] ?? 'Anonyme';
-            $userId = $INFO['client'] ?? '';
-            $userName = $INFO['userinfo']['name'] ?? '';
-            $userMail = $INFO['userinfo']['mail'] ?? '';
-        } elseif (!empty($INFO['client'])) {
-            $currentUser = $INFO['client'];
+        // Primary: Check if user is logged in via INFO
+        if (isset($INFO['client']) && !empty($INFO['client'])) {
             $userId = $INFO['client'];
+            $currentUser = $INFO['client'];
+            
+            // Get full name if available
+            if (isset($INFO['userinfo']['name']) && !empty($INFO['userinfo']['name'])) {
+                $userName = $INFO['userinfo']['name'];
+                $currentUser = $userName; // Prefer full name over ID
+            }
+            
+            if (isset($INFO['userinfo']['mail'])) {
+                $userMail = $INFO['userinfo']['mail'];
+            }
         }
         
-        // If still anonymous, try $_SERVER
-        if ($currentUser === 'Anonyme' && !empty($_SERVER['REMOTE_USER'])) {
-            $currentUser = $_SERVER['REMOTE_USER'];
-            $userId = $_SERVER['REMOTE_USER'];
+        // Fallback: Check $_SERVER for auth info
+        if ($currentUser === 'Anonyme') {
+            if (!empty($_SERVER['REMOTE_USER'])) {
+                $currentUser = $_SERVER['REMOTE_USER'];
+                $userId = $_SERVER['REMOTE_USER'];
+            } elseif (!empty($_SERVER['PHP_AUTH_USER'])) {
+                $currentUser = $_SERVER['PHP_AUTH_USER'];
+                $userId = $_SERVER['PHP_AUTH_USER'];
+            }
         }
         
-        // Debug logging
-        error_log("Kanban Debug - User detection: " . json_encode([
+        // Additional check: DokuWiki auth
+        if ($currentUser === 'Anonyme' && function_exists('auth_ismanager') && function_exists('auth_quickaclcheck')) {
+            global $ID;
+            if (auth_quickaclcheck($ID) > 0) {
+                // User has permissions, try to get username
+                if (isset($_SESSION['auth']['user'])) {
+                    $currentUser = $_SESSION['auth']['user'];
+                    $userId = $_SESSION['auth']['user'];
+                }
+            }
+        }
+        
+        // Development fallback: if we're in development/testing and no user is detected
+        if ($currentUser === 'Anonyme' && (
+            strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false ||
+            strpos($_SERVER['SERVER_NAME'] ?? '', 'localhost') !== false ||
+            isset($_GET['debug_user'])
+        )) {
+            // Use a development user name if specified
+            if (isset($_GET['debug_user']) && !empty($_GET['debug_user'])) {
+                $currentUser = 'dev_' . preg_replace('/[^a-zA-Z0-9_]/', '', $_GET['debug_user']);
+                $userId = $currentUser;
+            } elseif (defined('KANBAN_DEV_USER')) {
+                $currentUser = KANBAN_DEV_USER;
+                $userId = KANBAN_DEV_USER;
+            }
+        }
+        
+        // If no user detected, create a fallback based on IP or generate a temp user
+        if ($currentUser === 'Anonyme') {
+            // Option 1: Use IP-based identification for demo/development
+            $clientIP = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
+            $tempUser = 'Utilisateur_' . substr(md5($clientIP), 0, 6);
+            
+            // Option 2: Use a simple browser-based identification
+            $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+            if (strpos($userAgent, 'Chrome') !== false) {
+                $tempUser = 'Demo_Chrome_User';
+            } elseif (strpos($userAgent, 'Firefox') !== false) {
+                $tempUser = 'Demo_Firefox_User';
+            } else {
+                $tempUser = 'Demo_User';
+            }
+            
+            $currentUser = $tempUser;
+            $userId = $tempUser;
+            
+            error_log("Kanban: No auth detected, using fallback user: $currentUser");
+        }
+        
+                // Debug logging plus visible
+        $debugData = [
             'INFO_client' => $INFO['client'] ?? 'null',
-            'INFO_userinfo' => $INFO['userinfo'] ?? 'null',
+            'INFO_userinfo_name' => $INFO['userinfo']['name'] ?? 'null',
+            'INFO_userinfo_mail' => $INFO['userinfo']['mail'] ?? 'null',
             'REMOTE_USER' => $_SERVER['REMOTE_USER'] ?? 'null',
-            'detected_user' => $currentUser
-        ]));
+            'PHP_AUTH_USER' => $_SERVER['PHP_AUTH_USER'] ?? 'null',
+            'detected_user' => $currentUser,
+            'session_auth' => $_SESSION['auth'] ?? 'null',
+            'timestamp' => date('Y-m-d H:i:s')
+        ];
+        
+        // Keep minimal logging for debugging if needed
+        // error_log("Kanban Debug - User detection: " . json_encode($debugData));
         
         $JSINFO['kanban_user'] = $currentUser;
         $JSINFO['kanban_user_id'] = $userId;
         $JSINFO['kanban_user_name'] = $userName;
         $JSINFO['kanban_user_mail'] = $userMail;
         
-        // Also add to script directly in case JSINFO doesn't work
+        // Also add to script directly via inline JS
         $JSINFO['kanban_debug'] = [
             'user_detected' => $currentUser,
-            'timestamp' => date('Y-m-d H:i:s')
+            'timestamp' => date('Y-m-d H:i:s'),
+            'method' => !empty($INFO['client']) ? 'INFO' : (!empty($_SERVER['REMOTE_USER']) ? 'SERVER' : 'unknown')
+        ];
+        
+        // Add HTML meta tag for JavaScript access
+        global $JSINFO;
+        if (!isset($JSINFO['kanban_html_injection'])) {
+            $JSINFO['kanban_html_injection'] = '<meta name="kanban-user" content="' . htmlspecialchars($currentUser) . '">';
+        }
+        
+        // Force add to HTML output directly
+        $event->data['meta'][] = [
+            'name' => 'kanban-user',
+            'content' => htmlspecialchars($currentUser)
+        ];
+        $event->data['meta'][] = [
+            'name' => 'kanban-user-name', 
+            'content' => htmlspecialchars($userName)
         ];
     }
 
