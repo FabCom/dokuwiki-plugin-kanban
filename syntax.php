@@ -134,9 +134,9 @@ class syntax_plugin_kanban extends SyntaxPlugin
     }
 
     /**
-     * Parse kanban content (JSON format)
+     * Parse kanban content (JSON format) - Public for testing
      */
-    private function parseKanbanContent($content)
+    public function parseKanbanContent($content)
     {
         $content = trim($content);
         

@@ -16,56 +16,69 @@ window.KanbanPlugin = (function() {
      */
     function getCurrentUser() {
         // Try the new kanban-specific JSINFO first
-        if (window.JSINFO && JSINFO.kanban_user) {
+        if (window.JSINFO && JSINFO.kanban_user && JSINFO.kanban_user !== 'Anonyme') {
+            console.log('👤 Utilisateur détecté via JSINFO:', JSINFO.kanban_user);
             return JSINFO.kanban_user;
         }
         
         // Try multiple sources for user info
         if (window.JSINFO && JSINFO.user) {
+            console.log('👤 Utilisateur détecté via JSINFO.user:', JSINFO.user);
             return JSINFO.user;
         }
         
         // Try to get from DokuWiki global
         if (window.dw && dw.user) {
+            console.log('👤 Utilisateur détecté via dw.user:', dw.user);
             return dw.user;
         }
         
         // Try to get from global INFO
         if (window.INFO && INFO.user) {
+            console.log('👤 Utilisateur détecté via INFO.user:', INFO.user);
             return INFO.user;
         }
         
-        // Check if user is logged in via cookie or session
-        const userCookie = document.cookie.split(';').find(cookie => 
-            cookie.trim().startsWith('DokuWiki=') || cookie.trim().startsWith('DW')
-        );
+        // Try to get from meta tag
+        const metaUser = document.querySelector('meta[name="user"]');
+        if (metaUser && metaUser.content) {
+            console.log('👤 Utilisateur détecté via meta:', metaUser.content);
+            return metaUser.content;
+        }
         
-        if (userCookie) {
-            // User seems to be logged in, try to get username from page meta
-            const metaUser = document.querySelector('meta[name="user"]');
-            if (metaUser) {
-                return metaUser.content;
-            }
-            
-            // Try to get from body class or data attributes
-            const bodyClass = document.body.className.match(/user-(\w+)/);
-            if (bodyClass) {
-                return bodyClass[1];
+        // Try to get from body class or data attributes
+        const bodyClass = document.body.className.match(/user-(\w+)/);
+        if (bodyClass) {
+            console.log('👤 Utilisateur détecté via body class:', bodyClass[1]);
+            return bodyClass[1];
+        }
+        
+        // Try to get from page content (search for "logged in as")
+        const userLinks = document.querySelectorAll('a[href*="do=profile"], a[title*="Profile"]');
+        for (let link of userLinks) {
+            if (link.textContent && link.textContent.trim() !== 'Login') {
+                console.log('👤 Utilisateur détecté via lien profil:', link.textContent.trim());
+                return link.textContent.trim();
             }
         }
         
-        console.log('Debug: Could not determine current user, available data:', {
+        console.log('⚠️ Aucun utilisateur détecté, JSINFO disponible:', {
             JSINFO: window.JSINFO,
-            dw: window.dw,
-            INFO: window.INFO,
-            cookies: document.cookie
+            kanban_debug: window.JSINFO?.kanban_debug
         });
         
         return 'Anonyme';
     }
 
     /**
-     * Get current date in French format
+     * Get current date in ISO format for database storage
+     */
+    function getCurrentDateTime() {
+        return new Date().toISOString().slice(0, 19).replace('T', ' ');
+    }
+
+    /**
+     * Get current date in French format for display
      */
     function getCurrentDate() {
         return new Date().toLocaleDateString('fr-FR');
@@ -460,47 +473,146 @@ window.KanbanPlugin = (function() {
      */
     function addCard(columnId) {
         const column = document.getElementById(columnId);
+        if (!column) return;
+        
+        const board = column.closest('.kanban-board');
         const cardsContainer = column.querySelector('.kanban-cards');
         
         const cardId = 'card_' + Date.now();
+        const currentUser = getCurrentUser();
+        const currentDateTime = getCurrentDateTime();
         
-        const cardHtml = `
-            <div class="kanban-card priority-normal" id="${cardId}" draggable="true">
-                <div class="kanban-card-header">
-                    <h4 class="kanban-card-title" contenteditable="true">Nouvelle Carte</h4>
-                    <button class="kanban-card-delete" onclick="KanbanPlugin.deleteCard('${cardId}')" title="Supprimer">×</button>
+        console.log('🆕 Création nouvelle carte:', {
+            user: currentUser,
+            dateTime: currentDateTime,
+            cardId: cardId
+        });
+        
+        // Create new card data with proper metadata
+        const newCardData = {
+            id: cardId,
+            title: 'Nouvelle Carte',
+            description: '',
+            priority: 'normal',
+            assignee: '',
+            tags: [],
+            creator: currentUser,
+            created: currentDateTime
+            // Note: pas de lastModified car c'est une création, pas une modification
+        };
+        
+        // Open modal for immediate editing instead of inline editing
+        showCardModal(newCardData, function(updatedData) {
+            console.log('💾 Données de la nouvelle carte sauvegardées:', updatedData);
+            
+            // Create the card HTML with complete data
+            const cardHtml = generateCardHtml(updatedData);
+            cardsContainer.insertAdjacentHTML('beforeend', cardHtml);
+            
+            // Setup drag and drop for new card
+            const newCard = document.getElementById(cardId);
+            if (board.dataset.sortable === 'true') {
+                newCard.addEventListener('dragstart', handleDragStart);
+                newCard.addEventListener('dragend', handleDragEnd);
+            }
+            
+            // Save the board with the new card
+            saveChanges(board.id, false, 'add_card');
+        });
+    }
+
+    /**
+     * Generate complete card HTML from card data
+     */
+    function generateCardHtml(cardData) {
+        const priorityClass = `priority-${cardData.priority || 'normal'}`;
+        
+        let html = `
+            <div class="kanban-card ${priorityClass}" id="${cardData.id}" draggable="true">
+                <div class="kanban-card-actions">
+                    <button onclick="KanbanPlugin.editCard('${cardData.id}')" title="Éditer">✏️</button>
+                    <button onclick="KanbanPlugin.deleteCard('${cardData.id}')" title="Supprimer">×</button>
                 </div>
-                <div class="kanban-card-footer"></div>
-            </div>
-        `;
+                
+                <div class="kanban-card-header">
+                    <h4 class="kanban-card-title" contenteditable="true">${escapeHtml(cardData.title)}</h4>
+                </div>`;
         
-        cardsContainer.insertAdjacentHTML('beforeend', cardHtml);
-        
-        // Setup drag and drop for new card
-        const newCard = document.getElementById(cardId);
-        const board = newCard.closest('.kanban-board');
-        
-        if (board.dataset.sortable === 'true') {
-            newCard.addEventListener('dragstart', handleDragStart);
-            newCard.addEventListener('dragend', handleDragEnd);
+        // Description
+        if (cardData.description) {
+            html += `<div class="kanban-card-description">${escapeHtml(cardData.description)}</div>`;
         }
         
-        // Focus on the title and select all text
-        const titleElement = newCard.querySelector('.kanban-card-title');
-        titleElement.focus();
+        // Footer with metadata
+        html += `<div class="kanban-card-footer">`;
         
-        // Select all text in the element
-        setTimeout(() => {
-            if (window.getSelection && document.createRange) {
-                const range = document.createRange();
-                range.selectNodeContents(titleElement);
-                const selection = window.getSelection();
-                selection.removeAllRanges();
-                selection.addRange(range);
+        // Priority indicator
+        if (cardData.priority && cardData.priority !== 'normal') {
+            html += `<span class="kanban-priority">${escapeHtml(cardData.priority)}</span>`;
+        }
+        
+        // Assignee
+        if (cardData.assignee) {
+            html += `<span class="kanban-assignee">${escapeHtml(cardData.assignee)}</span>`;
+        }
+        
+        // Tags
+        if (cardData.tags && cardData.tags.length > 0) {
+            cardData.tags.forEach(tag => {
+                if (tag.trim()) {
+                    html += `<span class="kanban-tag">${escapeHtml(tag.trim())}</span>`;
+                }
+            });
+        }
+        
+        html += `</div>`; // Close footer
+        
+        // Card metadata
+        if (cardData.creator || cardData.created) {
+            html += `<div class="kanban-card-meta">`;
+            
+            // Creator with avatar
+            if (cardData.creator) {
+                html += `<div class="kanban-card-creator">`;
+                const creatorInitial = cardData.creator.charAt(0).toUpperCase();
+                html += `<div class="kanban-card-avatar">${creatorInitial}</div>`;
+                html += `<span>${escapeHtml(cardData.creator)}</span>`;
+                html += `</div>`;
             }
-        }, 10);
+            
+            // Created date
+            if (cardData.created) {
+                const createdDate = new Date(cardData.created).toLocaleDateString('fr-FR');
+                html += `<div class="kanban-card-date">${createdDate}</div>`;
+            }
+            
+            // Last modified info
+            if (cardData.lastModifiedBy || cardData.lastModified) {
+                html += `<div class="kanban-last-modified">`;
+                if (cardData.lastModifiedBy) {
+                    html += `<span class="modified-by">Modifié par ${escapeHtml(cardData.lastModifiedBy)}</span>`;
+                }
+                if (cardData.lastModified) {
+                    const modifiedDate = new Date(cardData.lastModified).toLocaleDateString('fr-FR');
+                    html += `<span class="modified-date"> le ${modifiedDate}</span>`;
+                }
+                html += `</div>`;
+            }
+            
+            html += `</div>`; // Close meta
+        }
         
-        saveChanges(board.id, false, 'add_card');
+        // Due date if present
+        if (cardData.dueDate) {
+            html += `<div class="kanban-card-due-date">`;
+            const dueDate = new Date(cardData.dueDate).toLocaleDateString('fr-FR');
+            html += `<span class="due-date">Échéance: ${dueDate}</span>`;
+            html += `</div>`;
+        }
+        
+        html += `</div>`; // Close card
+        
+        return html;
     }
 
     /**
@@ -515,6 +627,19 @@ window.KanbanPlugin = (function() {
         
         showCardModal(cardData, function(updatedData) {
             console.log('🔄 Mise à jour de la carte avec:', updatedData);
+            
+            // Add modification metadata
+            const currentUser = getCurrentUser();
+            const currentDateTime = getCurrentDateTime();
+            
+            updatedData.lastModified = currentDateTime;
+            updatedData.lastModifiedBy = currentUser;
+            
+            console.log('📝 Ajout métadonnées modification:', {
+                lastModified: updatedData.lastModified,
+                lastModifiedBy: updatedData.lastModifiedBy
+            });
+            
             updateCardDisplay(card, updatedData);
             console.log('✅ DOM mis à jour, sauvegarde...');
             saveChanges(board.id, false, 'edit_card');

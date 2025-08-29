@@ -56,19 +56,54 @@ class action_plugin_kanban extends ActionPlugin
      */
     private function addUserInfoToJSINFO()
     {
-        global $JSINFO, $INFO;
+        global $JSINFO, $INFO, $conf;
         
         // Ensure JSINFO array exists
         if (!is_array($JSINFO)) {
             $JSINFO = array();
         }
         
-        // Add user information
-        $currentUser = $INFO['userinfo']['name'] ?? $INFO['client'] ?? 'Anonyme';
+        // Try multiple sources for user information
+        $currentUser = 'Anonyme';
+        $userId = '';
+        $userName = '';
+        $userMail = '';
+        
+        // Check if user is logged in
+        if (isset($INFO['userinfo']) && is_array($INFO['userinfo'])) {
+            $currentUser = $INFO['userinfo']['name'] ?? $INFO['client'] ?? 'Anonyme';
+            $userId = $INFO['client'] ?? '';
+            $userName = $INFO['userinfo']['name'] ?? '';
+            $userMail = $INFO['userinfo']['mail'] ?? '';
+        } elseif (!empty($INFO['client'])) {
+            $currentUser = $INFO['client'];
+            $userId = $INFO['client'];
+        }
+        
+        // If still anonymous, try $_SERVER
+        if ($currentUser === 'Anonyme' && !empty($_SERVER['REMOTE_USER'])) {
+            $currentUser = $_SERVER['REMOTE_USER'];
+            $userId = $_SERVER['REMOTE_USER'];
+        }
+        
+        // Debug logging
+        error_log("Kanban Debug - User detection: " . json_encode([
+            'INFO_client' => $INFO['client'] ?? 'null',
+            'INFO_userinfo' => $INFO['userinfo'] ?? 'null',
+            'REMOTE_USER' => $_SERVER['REMOTE_USER'] ?? 'null',
+            'detected_user' => $currentUser
+        ]));
+        
         $JSINFO['kanban_user'] = $currentUser;
-        $JSINFO['kanban_user_id'] = $INFO['client'] ?? '';
-        $JSINFO['kanban_user_name'] = $INFO['userinfo']['name'] ?? '';
-        $JSINFO['kanban_user_mail'] = $INFO['userinfo']['mail'] ?? '';
+        $JSINFO['kanban_user_id'] = $userId;
+        $JSINFO['kanban_user_name'] = $userName;
+        $JSINFO['kanban_user_mail'] = $userMail;
+        
+        // Also add to script directly in case JSINFO doesn't work
+        $JSINFO['kanban_debug'] = [
+            'user_detected' => $currentUser,
+            'timestamp' => date('Y-m-d H:i:s')
+        ];
     }
 
     /**
