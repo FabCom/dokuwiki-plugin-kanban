@@ -209,67 +209,52 @@ class action_plugin_kanban extends ActionPlugin
     }
 
     /**
-     * Generate kanban content from data structure
+     * Generate kanban content from data structure (JSON format)
      */
     private function generateKanbanContent($data)
     {
-        $content = '';
+        // Extract columns from the data structure
+        $columns = array();
         
         if (isset($data['columns']) && is_array($data['columns'])) {
-            foreach ($data['columns'] as $column) {
-                $content .= "## " . ($column['title'] ?? 'Sans titre') . "\n";
+            $columns = $data['columns'];
+        }
+        
+        // Clean up the data structure for JSON storage
+        foreach ($columns as $index => $column) {
+            // Ensure required fields
+            if (!isset($column['id'])) {
+                $columns[$index]['id'] = uniqid('col_');
+            }
+            if (!isset($column['title'])) {
+                $columns[$index]['title'] = 'Colonne ' . ($index + 1);
+            }
+            if (!isset($column['cards'])) {
+                $columns[$index]['cards'] = array();
+            }
+            
+            // Clean up cards
+            foreach ($columns[$index]['cards'] as $cardIndex => $card) {
+                if (!isset($card['id'])) {
+                    $columns[$index]['cards'][$cardIndex]['id'] = uniqid('card_');
+                }
+                if (!isset($card['title'])) {
+                    $columns[$index]['cards'][$cardIndex]['title'] = 'Carte sans titre';
+                }
                 
-                if (isset($column['cards']) && is_array($column['cards'])) {
-                    foreach ($column['cards'] as $card) {
-                        $cardLine = "* " . ($card['title'] ?? 'Carte sans titre');
-                        
-                        // Add card attributes
-                        $attributes = [];
-                        if (!empty($card['description'])) {
-                            // Escape description for wiki format (replace newlines and brackets)
-                            $desc = str_replace(["\n", "[", "]"], ["\\n", "&#91;", "&#93;"], $card['description']);
-                            $attributes[] = "description:" . $desc;
-                        }
-                        if (!empty($card['priority']) && $card['priority'] !== 'normal') {
-                            $attributes[] = "priority:" . $card['priority'];
-                        }
-                        if (!empty($card['assignee'])) {
-                            $attributes[] = "assignee:" . $card['assignee'];
-                        }
-                        if (!empty($card['tags']) && is_array($card['tags'])) {
-                            $attributes[] = "tags:" . implode(',', $card['tags']);
-                        }
-                        if (!empty($card['creator'])) {
-                            $attributes[] = "creator:" . $card['creator'];
-                        }
-                        if (!empty($card['created'])) {
-                            $attributes[] = "created:" . $card['created'];
-                        }
-                        if (!empty($card['dueDate'])) {
-                            $attributes[] = "dueDate:" . $card['dueDate'];
-                        }
-                        if (!empty($card['lastModifiedBy'])) {
-                            $attributes[] = "lastModifiedBy:" . $card['lastModifiedBy'];
-                        }
-                        if (!empty($card['lastModified'])) {
-                            $attributes[] = "lastModified:" . $card['lastModified'];
-                        }
-                        
-                        if (!empty($attributes)) {
-                            $cardLine .= " [" . implode("] [", $attributes) . "]";
-                        }
-                        
-                        // Debug log pour voir ce qui est généré
-                        error_log("Kanban Debug - Carte générée: " . $cardLine);
-                        
-                        $content .= $cardLine . "\n";
+                // Remove empty or null values to keep JSON clean
+                $cleanCard = array();
+                foreach ($card as $key => $value) {
+                    if ($value !== null && $value !== '' && !(is_array($value) && empty($value))) {
+                        $cleanCard[$key] = $value;
                     }
                 }
-                $content .= "\n";
+                $columns[$index]['cards'][$cardIndex] = $cleanCard;
             }
         }
         
-        return trim($content);
+        // Generate formatted JSON with proper indentation
+        return json_encode($columns, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -383,92 +368,103 @@ class action_plugin_kanban extends ActionPlugin
      */
     private function parseKanbanContentToData($content)
     {
-        $data = [
-            'title' => 'Kanban Board', // Valeur par défaut, sera écrasée si trouvée
-            'columns' => []
-        ];
+        $content = trim($content);
         
-        $lines = explode("\n", $content);
-        $currentColumn = null;
+        // If content is empty, return default structure
+        if (empty($content)) {
+            return [
+                'title' => 'Kanban Board',
+                'columns' => [
+                    [
+                        'id' => uniqid('col_'),
+                        'title' => 'À faire',
+                        'cards' => []
+                    ],
+                    [
+                        'id' => uniqid('col_'),
+                        'title' => 'En cours',
+                        'cards' => []
+                    ],
+                    [
+                        'id' => uniqid('col_'),
+                        'title' => 'Terminé',
+                        'cards' => []
+                    ]
+                ]
+            ];
+        }
         
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if (empty($line)) continue;
+        // Try to parse as JSON
+        $columns = json_decode($content, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            // Invalid JSON, return default structure
+            return [
+                'title' => 'Kanban Board',
+                'columns' => [
+                    [
+                        'id' => uniqid('col_'),
+                        'title' => 'À faire',
+                        'cards' => []
+                    ],
+                    [
+                        'id' => uniqid('col_'),
+                        'title' => 'En cours',
+                        'cards' => []
+                    ],
+                    [
+                        'id' => uniqid('col_'),
+                        'title' => 'Terminé',
+                        'cards' => []
+                    ]
+                ]
+            ];
+        }
+        
+        // Validate and ensure required fields
+        if (!is_array($columns)) {
+            $columns = [];
+        }
+        
+        foreach ($columns as $index => $column) {
+            // Ensure column has required fields
+            if (!isset($column['id'])) {
+                $columns[$index]['id'] = uniqid('col_');
+            }
+            if (!isset($column['title'])) {
+                $columns[$index]['title'] = 'Colonne ' . ($index + 1);
+            }
+            if (!isset($column['cards']) || !is_array($column['cards'])) {
+                $columns[$index]['cards'] = [];
+            }
             
-            // Column header (starts with ##)
-            if (preg_match('/^##\s*(.+)$/', $line, $matches)) {
-                if ($currentColumn !== null) {
-                    $data['columns'][] = $currentColumn;
+            // Validate cards
+            foreach ($columns[$index]['cards'] as $cardIndex => $card) {
+                if (!isset($card['id'])) {
+                    $columns[$index]['cards'][$cardIndex]['id'] = uniqid('card_');
                 }
-                $currentColumn = [
-                    'id' => uniqid('col_'),
-                    'title' => trim($matches[1]),
-                    'cards' => []
+                if (!isset($card['title'])) {
+                    $columns[$index]['cards'][$cardIndex]['title'] = 'Carte sans titre';
+                }
+                
+                // Set default values for optional fields
+                $defaultCard = [
+                    'description' => '',
+                    'priority' => 'normal',
+                    'assignee' => '',
+                    'tags' => [],
+                    'creator' => '',
+                    'created' => date('Y-m-d H:i:s')
                 ];
-                continue;
-            }
-            
-            // Card (starts with *)
-            if (preg_match('/^\*\s*(.+)$/', $line, $matches) && $currentColumn !== null) {
-                $cardContent = trim($matches[1]);
-                $card = $this->parseCardFromWiki($cardContent);
-                $currentColumn['cards'][] = $card;
+                
+                $columns[$index]['cards'][$cardIndex] = array_merge($defaultCard, $card);
             }
         }
         
-        // Add last column
-        if ($currentColumn !== null) {
-            $data['columns'][] = $currentColumn;
-        }
-        
-        return $data;
-    }
-
-    /**
-     * Parse individual card from wiki format
-     */
-    private function parseCardFromWiki($content)
-    {
-        $card = [
-            'id' => uniqid('card_'),
-            'title' => $content,
-            'description' => '',
-            'priority' => 'normal',
-            'assignee' => '',
-            'dueDate' => '',
-            'tags' => [],
-            'creator' => '',
-            'created' => '',
-            'lastModifiedBy' => '',
-            'lastModified' => ''
+        return [
+            'title' => 'Kanban Board',
+            'columns' => $columns
         ];
-        
-        // Parse card format: Title [priority:high] [assignee:John] [tags:urgent,bug] [creator:admin] [created:2024-01-01] [description:...]
-        if (preg_match('/^(.*?)\s*(?:\[(.*?)\])*$/', $content, $matches)) {
-            $card['title'] = trim($matches[1]);
-            
-            // Parse all attribute blocks
-            if (preg_match_all('/\[([^\]]+)\]/', $content, $attrMatches)) {
-                foreach ($attrMatches[1] as $attrBlock) {
-                    if (strpos($attrBlock, ':') !== false) {
-                        list($key, $value) = explode(':', $attrBlock, 2);
-                        $key = trim($key);
-                        $value = trim($value);
-                        
-                        if ($key === 'tags') {
-                            $card['tags'] = array_map('trim', explode(',', $value));
-                        } elseif ($key === 'description') {
-                            // Decode description (restore newlines and brackets)
-                            $card['description'] = str_replace(["\\n", "&#91;", "&#93;"], ["\n", "[", "]"], $value);
-                        } else {
-                            $card[$key] = $value;
-                        }
-                    }
-                }
-            }
-        }
-        
-        return $card;
     }
 
     /**

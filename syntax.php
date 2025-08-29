@@ -134,84 +134,98 @@ class syntax_plugin_kanban extends SyntaxPlugin
     }
 
     /**
-     * Parse kanban content (cards)
+     * Parse kanban content (JSON format)
      */
     private function parseKanbanContent($content)
     {
-        $cards = array();
-        $lines = explode("\n", trim($content));
+        $content = trim($content);
         
-        $currentColumn = 0;
-        $columns = array();
-        
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if (empty($line)) continue;
-            
-            // Column header (starts with ##)
-            if (preg_match('/^##\s*(.+)$/', $line, $matches)) {
-                $currentColumn = count($columns);
-                $columns[] = array(
-                    'title' => trim($matches[1]),
+        // If content is empty, return default structure
+        if (empty($content)) {
+            return array(
+                array(
+                    'id' => uniqid('col_'),
+                    'title' => 'À faire',
                     'cards' => array()
+                ),
+                array(
+                    'id' => uniqid('col_'),
+                    'title' => 'En cours',
+                    'cards' => array()
+                ),
+                array(
+                    'id' => uniqid('col_'),
+                    'title' => 'Terminé',
+                    'cards' => array()
+                )
+            );
+        }
+        
+        // Try to parse as JSON
+        $data = json_decode($content, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            // Invalid JSON, return default structure
+            return array(
+                array(
+                    'id' => uniqid('col_'),
+                    'title' => 'À faire',
+                    'cards' => array()
+                ),
+                array(
+                    'id' => uniqid('col_'),
+                    'title' => 'En cours',
+                    'cards' => array()
+                ),
+                array(
+                    'id' => uniqid('col_'),
+                    'title' => 'Terminé',
+                    'cards' => array()
+                )
+            );
+        }
+        
+        // Validate and ensure required fields
+        if (!is_array($data)) {
+            $data = array();
+        }
+        
+        foreach ($data as $index => $column) {
+            // Ensure column has required fields
+            if (!isset($column['id'])) {
+                $data[$index]['id'] = uniqid('col_');
+            }
+            if (!isset($column['title'])) {
+                $data[$index]['title'] = 'Colonne ' . ($index + 1);
+            }
+            if (!isset($column['cards']) || !is_array($column['cards'])) {
+                $data[$index]['cards'] = array();
+            }
+            
+            // Validate cards
+            foreach ($data[$index]['cards'] as $cardIndex => $card) {
+                if (!isset($card['id'])) {
+                    $data[$index]['cards'][$cardIndex]['id'] = uniqid('card_');
+                }
+                if (!isset($card['title'])) {
+                    $data[$index]['cards'][$cardIndex]['title'] = 'Carte sans titre';
+                }
+                
+                // Set default values for optional fields
+                $defaultCard = array(
+                    'description' => '',
+                    'priority' => 'normal',
+                    'assignee' => '',
+                    'tags' => array(),
+                    'creator' => '',
+                    'created' => date('Y-m-d H:i:s')
                 );
-                continue;
-            }
-            
-            // Card (starts with *)
-            if (preg_match('/^\*\s*(.+)$/', $line, $matches)) {
-                $cardContent = trim($matches[1]);
                 
-                // Parse card details
-                $card = $this->parseCard($cardContent);
-                $card['id'] = uniqid('card_');
-                
-                if (isset($columns[$currentColumn])) {
-                    $columns[$currentColumn]['cards'][] = $card;
-                }
+                $data[$index]['cards'][$cardIndex] = array_merge($defaultCard, $card);
             }
         }
         
-        return $columns;
-    }
-
-    /**
-     * Parse individual card content
-     */
-    private function parseCard($content)
-    {
-        $card = array(
-            'title' => $content,
-            'description' => '',
-            'priority' => 'normal',
-            'assignee' => '',
-            'tags' => array()
-        );
-        
-        // Parse card format: Title [priority:high] [assignee:John] [tags:urgent,bug]
-        if (preg_match('/^(.*?)\s*(?:\[(.*?)\])*$/', $content, $matches)) {
-            $card['title'] = trim($matches[1]);
-            
-            if (isset($matches[2])) {
-                $attributes = $matches[2];
-                
-                // Parse attributes
-                if (preg_match_all('/(\w+):([^,\]]+)/', $attributes, $attrMatches, PREG_SET_ORDER)) {
-                    foreach ($attrMatches as $attr) {
-                        $key = $attr[1];
-                        $value = $attr[2];
-                        
-                        if ($key === 'tags') {
-                            $card['tags'] = array_map('trim', explode(',', $value));
-                        } else {
-                            $card[$key] = $value;
-                        }
-                    }
-                }
-            }
-        }
-        
-        return $card;
+        return $data;
     }
 
     /**
@@ -244,7 +258,7 @@ class syntax_plugin_kanban extends SyntaxPlugin
     private function renderKanbanContent($renderer, $columns)
     {
         foreach ($columns as $columnIndex => $column) {
-            $columnId = 'column_' . $columnIndex . '_' . uniqid();
+            $columnId = $column['id'];
             
             $renderer->doc .= '<div class="kanban-column" id="' . $columnId . '" data-column-index="' . $columnIndex . '">';
             $renderer->doc .= '<div class="kanban-column-header">';
