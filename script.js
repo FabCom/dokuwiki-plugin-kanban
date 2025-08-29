@@ -615,7 +615,7 @@ window.KanbanPlugin = (function() {
         if (cardData.dueDate) {
             html += `<div class="kanban-card-due-date">`;
             const dueDate = new Date(cardData.dueDate).toLocaleDateString('fr-FR');
-            html += `<span class="due-date">Échéance: ${dueDate}</span>`;
+            html += `<span class="due-date" data-date="${cardData.dueDate}">Échéance: ${dueDate}</span>`;
             html += `</div>`;
         }
         
@@ -650,8 +650,11 @@ window.KanbanPlugin = (function() {
             });
             
             updateCardDisplay(card, updatedData);
-            console.log('✅ DOM mis à jour, sauvegarde...');
-            saveChanges(board.id, false, 'edit_card');
+            
+            // Wait a bit for DOM updates to complete before saving
+            setTimeout(() => {
+                saveChanges(board.id, false, 'edit_card');
+            }, 10);
         });
     }
 
@@ -665,6 +668,18 @@ window.KanbanPlugin = (function() {
         const dateElement = cardElement.querySelector('.kanban-card-date');
         const tagElements = cardElement.querySelectorAll('.kanban-tag');
         
+        // Extract dueDate - robuste approach
+        let dueDate = '';
+        
+        // Try multiple selectors for data-date
+        const dueDateElement = cardElement.querySelector('[data-date]') || 
+                              cardElement.querySelector('.due-date[data-date]') ||
+                              cardElement.querySelector('.kanban-card-due-date [data-date]');
+        
+        if (dueDateElement) {
+            dueDate = dueDateElement.getAttribute('data-date') || '';
+        }
+        
         return {
             id: cardElement.id,
             title: titleElement ? titleElement.textContent.trim() : '',
@@ -673,6 +688,7 @@ window.KanbanPlugin = (function() {
             assignee: '', // À extraire selon le format
             creator: creatorElement ? creatorElement.textContent.trim() : '',
             created: dateElement ? dateElement.textContent.trim() : '',
+            dueDate: dueDate,
             tags: Array.from(tagElements).map(tag => tag.textContent.trim())
         };
     }
@@ -766,15 +782,20 @@ window.KanbanPlugin = (function() {
         modal.querySelector('#card-tags').addEventListener('input', updateTagsDisplay);
         
         modal.querySelector('#save-btn').addEventListener('click', function() {
+            const rawDueDate = modal.querySelector('#card-due-date').value.trim();
+            console.log('🗓️ Raw dueDate from modal:', rawDueDate);
+            
             const updatedData = {
                 ...cardData,
                 title: modal.querySelector('#card-title').value.trim(),
                 description: modal.querySelector('#card-description').value.trim(),
                 priority: modal.querySelector('#card-priority').value,
                 assignee: modal.querySelector('#card-assignee').value.trim(),
-                dueDate: modal.querySelector('#card-due-date').value.trim(),
+                dueDate: rawDueDate,
                 tags: modal.querySelector('#card-tags').value.split(',').map(tag => tag.trim()).filter(tag => tag)
             };
+            
+            console.log('📝 Updated data with dueDate:', updatedData);
             
             // Only add lastModified info if this is actually a modification (not creation)
             // Check if card already exists in DOM (meaning it's an edit, not creation)
@@ -872,8 +893,6 @@ window.KanbanPlugin = (function() {
         
         // Update due date display
         updateCardDueDate(cardElement, cardData);
-        
-        console.log('✅ Affichage carte mis à jour');
     }
 
     /**
@@ -952,32 +971,31 @@ window.KanbanPlugin = (function() {
     /**
      * Update card due date display
      */
+    /**
+     * Update card due date display
+     */
     function updateCardDueDate(cardElement, cardData) {
-        let dueDateElement = cardElement.querySelector('.kanban-due-date');
+        // Remove any existing due date elements (clean slate)
+        const existingDueDates = cardElement.querySelectorAll('.kanban-due-date, .kanban-card-due-date');
+        existingDueDates.forEach(el => el.remove());
         
-        if (cardData.dueDate) {
-            if (!dueDateElement) {
-                dueDateElement = document.createElement('div');
-                dueDateElement.className = 'kanban-due-date';
-                // Insert after description or header
-                const insertAfter = cardElement.querySelector('.kanban-card-description') || 
-                                  cardElement.querySelector('.kanban-card-header');
-                insertAfter.after(dueDateElement);
-            }
+        // Add new due date if present
+        if (cardData.dueDate && cardData.dueDate.trim() !== '') {
+            const dueDateElement = document.createElement('div');
+            dueDateElement.className = 'kanban-card-due-date';
             
             const dueDate = new Date(cardData.dueDate);
-            const today = new Date();
-            const isOverdue = dueDate < today;
-            const isToday = dueDate.toDateString() === today.toDateString();
+            const dueDateFormatted = dueDate.toLocaleDateString('fr-FR');
             
-            dueDateElement.className = 'kanban-due-date';
-            if (isOverdue) dueDateElement.classList.add('overdue');
-            else if (isToday) dueDateElement.classList.add('today');
+            dueDateElement.innerHTML = `<span class="due-date" data-date="${cardData.dueDate}">Échéance: ${dueDateFormatted}</span>`;
             
-            dueDateElement.dataset.date = cardData.dueDate;
-            dueDateElement.innerHTML = `⏰ ${dueDate.toLocaleDateString('fr-FR')}`;
-        } else if (dueDateElement) {
-            dueDateElement.remove();
+            // Insert before meta section or at the end
+            const metaElement = cardElement.querySelector('.kanban-card-meta');
+            if (metaElement) {
+                metaElement.before(dueDateElement);
+            } else {
+                cardElement.appendChild(dueDateElement);
+            }
         }
     }
 
@@ -1113,7 +1131,6 @@ window.KanbanPlugin = (function() {
      * Extract board data from DOM
      */
     function extractBoardData(board) {
-        console.log('📤 Extraction des données du tableau...');
         const columns = [];
         
         board.querySelectorAll('.kanban-column').forEach((column, index) => {
@@ -1173,9 +1190,11 @@ window.KanbanPlugin = (function() {
                 }
                 
                 // Extract due date
-                const dueDateElement = card.querySelector('.kanban-due-date');
+                const dueDateElement = card.querySelector('.due-date[data-date]') || 
+                                     card.querySelector('.kanban-due-date') ||
+                                     card.querySelector('[data-date]');
                 if (dueDateElement) {
-                    cardData.dueDate = dueDateElement.dataset.date || dueDateElement.textContent.trim();
+                    cardData.dueDate = dueDateElement.dataset.date || dueDateElement.getAttribute('data-date') || dueDateElement.textContent.trim();
                 }
                 
                 // Extract last modified info
@@ -1187,7 +1206,6 @@ window.KanbanPlugin = (function() {
                     if (modifiedDate) cardData.lastModified = modifiedDate.textContent.trim();
                 }
                 
-                console.log(`📋 Carte ${cardData.id}:`, cardData);
                 columnData.cards.push(cardData);
             });
             
@@ -1199,7 +1217,6 @@ window.KanbanPlugin = (function() {
             columns: columns
         };
         
-        console.log('📊 Données complètes du tableau:', boardData);
         return boardData;
     }
 
