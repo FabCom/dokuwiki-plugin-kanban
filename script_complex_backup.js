@@ -13,8 +13,6 @@
      * Initialize all kanban boards on page load
      */
     function initializeKanbanBoards() {
-        // Export kanbanBoards to global scope for modules
-        window.kanbanBoards = kanbanBoards;
         const boards = document.querySelectorAll('.kanban-board');
         
         boards.forEach(board => {
@@ -84,8 +82,9 @@
      */
     function renderColumn(column, index, editable) {
         let html = `
-            <div class="kanban-column" id="${column.id}" data-column-index="${index}">
+            <div class="kanban-column" id="${column.id}" data-column-index="${index}" ${editable ? 'draggable="true"' : ''}>
                 <div class="kanban-column-header">
+                    ${editable ? '<div class="kanban-column-drag-handle" title="Glisser pour réorganiser">⋮⋮</div>' : ''}
                     <h3 class="kanban-column-title" ${editable ? 'contenteditable="true"' : ''}>${escapeHtml(column.title)}</h3>`;
         
         if (editable) {
@@ -340,6 +339,11 @@
         const board = document.getElementById(boardId);
         const boardData = kanbanBoards[boardId];
         
+        if (!boardData) {
+            console.error('Board data non trouvé pour:', boardId);
+            return;
+        }
+        
         const columnTitle = prompt('Nom de la nouvelle colonne:');
         if (!columnTitle) return;
         
@@ -349,13 +353,28 @@
             cards: []
         };
         
-        // Add to data
+        console.log('Création de nouvelle colonne:', newColumn);
+        
+        // Add to data FIRST
         boardData.columns.push(newColumn);
+        console.log('Colonne ajoutée aux données. Total colonnes:', boardData.columns.length);
         
         // Add to DOM
         const columnsContainer = board.querySelector('.kanban-columns');
         columnsContainer.insertAdjacentHTML('beforeend', 
             renderColumn(newColumn, boardData.columns.length - 1, board.dataset.editable === 'true'));
+        
+        // Setup drag & drop for the new column
+        const newColumnElement = document.getElementById(newColumn.id);
+        if (newColumnElement && board.dataset.sortable === 'true') {
+            setupColumnDragAndDrop(newColumnElement);
+            setupColumnDropZone(newColumnElement.querySelector('.kanban-cards'));
+            console.log('Drag & drop configuré pour la nouvelle colonne');
+        }
+        
+        // Verify the column was added correctly
+        const updatedBoardData = kanbanBoards[boardId];
+        console.log('État final des données après ajout:', updatedBoardData.columns.map(col => ({id: col.id, title: col.title})));
         
         // Save changes
         saveChanges(boardId, 'add_column');
@@ -393,6 +412,8 @@
     function saveChanges(boardId, changeType) {
         const boardData = kanbanBoards[boardId];
         
+        console.log(`Sauvegarde ${changeType} pour board ${boardId}:`, boardData);
+        
         const formData = new FormData();
         formData.append('call', 'kanban');
         formData.append('action', 'save_board');
@@ -409,8 +430,10 @@
         .then(data => {
             if (data.success) {
                 showNotification('Tableau sauvegardé', 'success');
+                console.log('Sauvegarde réussie pour:', changeType);
             } else {
                 showNotification('Erreur de sauvegarde: ' + data.message, 'error');
+                console.error('Erreur de sauvegarde:', data.message);
             }
         })
         .catch(error => {
@@ -605,6 +628,16 @@
             card.style.cursor = 'default';
         });
         
+        // Disable column drag and drop
+        board.querySelectorAll('.kanban-column').forEach(column => {
+            column.draggable = false;
+        });
+        
+        // Hide column drag handles
+        board.querySelectorAll('.kanban-column-drag-handle').forEach(handle => {
+            handle.style.display = 'none';
+        });
+        
         // Disable column management buttons
         board.querySelectorAll('.kanban-column-header button').forEach(btn => {
             btn.disabled = true;
@@ -647,6 +680,29 @@
         board.querySelectorAll('.kanban-card').forEach(card => {
             card.draggable = true;
             card.style.cursor = 'move';
+            console.log(`Carte ${card.id} rendue draggable`);
+            
+            // Re-setup drag and drop events for cards
+            setupCardDragAndDrop(card);
+        });
+        
+        // Re-setup drop zones for cards
+        board.querySelectorAll('.kanban-cards').forEach(cardsContainer => {
+            setupColumnDropZone(cardsContainer);
+            console.log(`Zone de drop configurée pour la colonne: ${cardsContainer.dataset.column}`);
+        });
+        
+        // Re-setup column drag and drop
+        board.querySelectorAll('.kanban-column').forEach(column => {
+            setupColumnDragAndDrop(column);
+        });
+        
+        // Re-setup drop zone for column reordering
+        setupColumnsDropZone(board);
+        
+        // Show column drag handles
+        board.querySelectorAll('.kanban-column-drag-handle').forEach(handle => {
+            handle.style.display = 'block';
         });
         
         // Enable column management buttons
@@ -812,6 +868,23 @@
      * Initialize board interactions (drag & drop, etc.)
      */
     function initializeBoardInteractions(board) {
+        const boardId = board.id;
+        
+        // Initialize data structure if needed
+        if (!kanbanBoards[boardId]) {
+            const data = board.dataset.kanbanData;
+            kanbanBoards[boardId] = data ? JSON.parse(data) : { columns: [] };
+        }
+        
+        // Sync DOM with data first to fix any inconsistencies
+        syncDomWithData();
+        
+        // Force update column indices after sync
+        setTimeout(() => {
+            updateColumnIndices(boardId);
+            console.log(`Synchronisation complète du board ${boardId}`);
+        }, 100);
+        
         // Disable editing by default (read-only mode)
         disableBoardEditing(board);
         
@@ -821,42 +894,100 @@
         if (board.dataset.sortable === 'true') {
             // Setup drag and drop for existing cards (will be disabled until unlocked)
             const cards = board.querySelectorAll('.kanban-card');
-            cards.forEach(card => {
-                if (window.KanbanDragDrop) {
-                    window.KanbanDragDrop.setupCardDragAndDrop(card);
-                }
-            });
+            cards.forEach(card => setupCardDragAndDrop(card));
             
-            // Setup drop zones
-            const columns = board.querySelectorAll('.kanban-cards');
-            columns.forEach(column => {
-                if (window.KanbanDragDrop) {
-                    window.KanbanDragDrop.setupColumnDropZone(column);
-                }
-            });
+            // Setup drop zones for cards
+            const cardColumns = board.querySelectorAll('.kanban-cards');
+            cardColumns.forEach(column => setupColumnDropZone(column));
+            
+            // Setup drag and drop for columns
+            const columns = board.querySelectorAll('.kanban-column');
+            columns.forEach(column => setupColumnDragAndDrop(column));
+            
+            // Setup drop zone for column reordering
+            setupColumnsDropZone(board);
         }
     }
 
     /**
-     * Setup drag and drop for a card - Delegate to module
+     * Setup drag and drop for a card
      */
     function setupCardDragAndDrop(card) {
-        if (window.KanbanDragDrop) {
-            window.KanbanDragDrop.setupCardDragAndDrop(card);
-        } else {
-            console.warn('KanbanDragDrop module not available');
-        }
+        console.log(`Configuration drag & drop pour la carte: ${card.id}`);
+        
+        // Remove existing event listeners to avoid duplicates
+        card.removeEventListener('dragstart', card._dragStartHandler);
+        card.removeEventListener('dragend', card._dragEndHandler);
+        
+        // Create and store event handlers
+        card._dragStartHandler = function(e) {
+            console.log(`Début du drag de la carte: ${card.id}`);
+            e.dataTransfer.setData('text/plain', card.id);
+            e.dataTransfer.effectAllowed = 'move';
+            card.classList.add('dragging');
+        };
+        
+        card._dragEndHandler = function(e) {
+            console.log(`Fin du drag de la carte: ${card.id}`);
+            card.classList.remove('dragging');
+        };
+        
+        // Add event listeners
+        card.addEventListener('dragstart', card._dragStartHandler);
+        card.addEventListener('dragend', card._dragEndHandler);
     }
 
     /**
-     * Setup drop zone for a column - Delegate to module
+     * Setup drop zone for a column (cards container)
      */
-    function setupColumnDropZone(column) {
-        if (window.KanbanDragDrop) {
-            window.KanbanDragDrop.setupColumnDropZone(column);
-        } else {
-            console.warn('KanbanDragDrop module not available');
-        }
+    function setupColumnDropZone(cardsContainer) {
+        console.log(`Configuration zone de drop pour: ${cardsContainer.dataset.column}`);
+        
+        // Remove existing event listeners to avoid duplicates
+        cardsContainer.removeEventListener('dragover', cardsContainer._dragOverHandler);
+        cardsContainer.removeEventListener('dragleave', cardsContainer._dragLeaveHandler);
+        cardsContainer.removeEventListener('drop', cardsContainer._dropHandler);
+        
+        // Create and store event handlers
+        cardsContainer._dragOverHandler = function(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            cardsContainer.classList.add('drag-over');
+        };
+        
+        cardsContainer._dragLeaveHandler = function(e) {
+            // Only remove drag-over if we're leaving the container itself, not a child
+            if (!cardsContainer.contains(e.relatedTarget)) {
+                cardsContainer.classList.remove('drag-over');
+            }
+        };
+        
+        cardsContainer._dropHandler = function(e) {
+            e.preventDefault();
+            cardsContainer.classList.remove('drag-over');
+            
+            const cardId = e.dataTransfer.getData('text/plain');
+            const card = document.getElementById(cardId);
+            
+            if (card && card.parentNode !== cardsContainer) {
+                console.log(`Déplacement de la carte ${cardId} vers la colonne ${cardsContainer.dataset.column}`);
+                
+                // Move card in data
+                moveCardInData(cardId, cardsContainer.dataset.column);
+                
+                // Move card in DOM
+                cardsContainer.appendChild(card);
+                
+                // Save changes
+                const board = cardsContainer.closest('.kanban-board');
+                saveChanges(board.id, 'move_card');
+            }
+        };
+        
+        // Add event listeners
+        cardsContainer.addEventListener('dragover', cardsContainer._dragOverHandler);
+        cardsContainer.addEventListener('dragleave', cardsContainer._dragLeaveHandler);
+        cardsContainer.addEventListener('drop', cardsContainer._dropHandler);
     }
 
     /**
@@ -889,6 +1020,464 @@
                 targetColumn.cards.push(cardData);
             }
         }
+    }
+
+    /**
+     * Setup drag and drop for a column
+     */
+    function setupColumnDragAndDrop(column) {
+        // Only allow dragging from the drag handle
+        const dragHandle = column.querySelector('.kanban-column-drag-handle');
+        const columnTitle = column.querySelector('.kanban-column-title');
+        
+        if (dragHandle) {
+            dragHandle.addEventListener('mousedown', function(e) {
+                column.draggable = true;
+            });
+            
+            column.addEventListener('dragstart', function(e) {
+                if (!column.draggable) {
+                    e.preventDefault();
+                    return;
+                }
+                
+                e.dataTransfer.setData('text/plain', JSON.stringify({
+                    type: 'column',
+                    columnId: column.id,
+                    columnIndex: column.dataset.columnIndex
+                }));
+                column.classList.add('column-dragging');
+                
+                // Reset draggable after drag starts
+                setTimeout(() => {
+                    column.draggable = false;
+                }, 0);
+            });
+            
+            column.addEventListener('dragend', function(e) {
+                column.classList.remove('column-dragging');
+                column.draggable = false;
+            });
+        }
+        
+        // Prevent drag events on contenteditable title
+        if (columnTitle) {
+            columnTitle.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+            
+            columnTitle.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Drop event blocked on column title');
+            });
+            
+            columnTitle.addEventListener('dragenter', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+            
+            // Save title changes when user finishes editing
+            columnTitle.addEventListener('blur', function(e) {
+                saveColumnTitleChange(column.id, columnTitle.textContent.trim());
+            });
+            
+            columnTitle.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    columnTitle.blur(); // This will trigger the blur event and save
+                }
+            });
+        }
+    }
+
+    /**
+     * Save column title change
+     */
+    function saveColumnTitleChange(columnId, newTitle) {
+        console.log(`Sauvegarde du nouveau titre pour ${columnId}: "${newTitle}"`);
+        
+        // Find and update in data
+        for (let boardId in kanbanBoards) {
+            const boardData = kanbanBoards[boardId];
+            const column = boardData.columns.find(col => col.id === columnId);
+            
+            if (column && column.title !== newTitle) {
+                const oldTitle = column.title;
+                column.title = newTitle;
+                
+                console.log(`Titre modifié: "${oldTitle}" → "${newTitle}"`);
+                
+                // Save changes
+                saveChanges(boardId, 'update_column_title');
+                return;
+            }
+        }
+    }
+
+    /**
+     * Setup drop zone for column reordering
+     */
+    function setupColumnsDropZone(board) {
+        const columnsContainer = board.querySelector('.kanban-columns');
+        let draggedColumn = null;
+        let originalPosition = null;
+        
+        columnsContainer.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            
+            try {
+                const dragDataText = e.dataTransfer.getData('text/plain');
+                if (!dragDataText) return;
+                
+                const dragData = JSON.parse(dragDataText);
+                if (dragData.type === 'column') {
+                    e.dataTransfer.dropEffect = 'move';
+                    
+                    // Store reference to dragged column if not already stored
+                    if (!draggedColumn) {
+                        draggedColumn = document.getElementById(dragData.columnId);
+                        originalPosition = Array.from(columnsContainer.children).indexOf(draggedColumn);
+                    }
+                    
+                    // Visual feedback for column reordering
+                    const afterElement = getDragAfterElement(columnsContainer, e.clientX);
+                    
+                    if (afterElement == null) {
+                        columnsContainer.appendChild(draggedColumn);
+                    } else {
+                        columnsContainer.insertBefore(draggedColumn, afterElement);
+                    }
+                }
+            } catch(error) {
+                // Not a valid JSON or not a column drag, ignore
+                console.log('Drag data non reconnu, ignoré:', error.message);
+            }
+        });
+        
+        columnsContainer.addEventListener('drop', function(e) {
+            e.preventDefault();
+            
+            try {
+                const dragDataText = e.dataTransfer.getData('text/plain');
+                if (!dragDataText) return;
+                
+                const dragData = JSON.parse(dragDataText);
+                if (dragData.type === 'column') {
+                    const newIndex = Array.from(columnsContainer.children).indexOf(draggedColumn);
+                    
+                    // Only save if position actually changed
+                    if (originalPosition !== newIndex) {
+                        // Update data structure
+                        moveColumnInData(dragData.columnId, newIndex);
+                        
+                        // Update column indices in DOM
+                        updateColumnIndices(columnsContainer);
+                        
+                        // Save changes
+                        saveChanges(board.id, 'reorder_columns');
+                        
+                        showNotification('Colonne déplacée avec succès', 'success');
+                        
+                        console.log(`Colonne ${dragData.columnId} déplacée de la position ${originalPosition} à ${newIndex}`);
+                    }
+                    
+                    // Reset references
+                    draggedColumn = null;
+                    originalPosition = null;
+                }
+            } catch(error) {
+                // Not a valid JSON or not a column drag, ignore
+                console.error('Erreur lors du drop de colonne:', error);
+            }
+        });
+        
+        // Reset references if drag is cancelled
+        columnsContainer.addEventListener('dragleave', function(e) {
+            // Only reset if we're leaving the container completely
+            if (!columnsContainer.contains(e.relatedTarget)) {
+                draggedColumn = null;
+                originalPosition = null;
+            }
+        });
+    }
+
+    /**
+     * Get the element after which the dragged column should be inserted
+     */
+    function getDragAfterElement(container, x) {
+        const draggableElements = [...container.querySelectorAll('.kanban-column:not(.column-dragging)')];
+        
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = x - box.left - box.width / 2;
+            
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            } else {
+                return closest;
+            }
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    /**
+     * Move column in data structure
+     */
+    function moveColumnInData(columnId, newIndex) {
+        // Find the board containing this column
+        let targetBoardId = null;
+        let boardData = null;
+        
+        for (let boardId in kanbanBoards) {
+            const board = kanbanBoards[boardId];
+            if (board.columns.some(col => col.id === columnId)) {
+                targetBoardId = boardId;
+                boardData = board;
+                break;
+            }
+        }
+        
+        if (!boardData) {
+            console.error('Board non trouvé pour la colonne:', columnId);
+            console.log('Tentative de synchronisation...');
+            
+            // Tenter de synchroniser le DOM avec les données
+            syncDomWithData();
+            return;
+        }
+        
+        // Instead of using the provided newIndex, let's sync with actual DOM order
+        const board = document.getElementById(targetBoardId);
+        const columnsContainer = board.querySelector('.kanban-columns');
+        const domColumns = Array.from(columnsContainer.querySelectorAll('.kanban-column'));
+        
+        console.log('Synchronisation de l\'ordre avec le DOM:');
+        console.log('- Ordre DOM actuel:', domColumns.map(col => col.id));
+        console.log('- Ordre Data actuel:', boardData.columns.map(col => col.id));
+        
+        // Rebuild the columns array based on DOM order
+        const newColumnsOrder = [];
+        
+        domColumns.forEach(domColumn => {
+            const dataColumn = boardData.columns.find(col => col.id === domColumn.id);
+            if (dataColumn) {
+                newColumnsOrder.push(dataColumn);
+            } else {
+                console.warn('Colonne trouvée dans le DOM mais pas dans les données:', domColumn.id);
+            }
+        });
+        
+        // Add any columns that are in data but not in DOM (shouldn't happen but safety check)
+        boardData.columns.forEach(dataColumn => {
+            if (!newColumnsOrder.find(col => col.id === dataColumn.id)) {
+                console.warn('Colonne trouvée dans les données mais pas dans le DOM:', dataColumn.id);
+                newColumnsOrder.push(dataColumn);
+            }
+        });
+        
+        // Update the board data
+        boardData.columns = newColumnsOrder;
+        
+        console.log('- Nouvel ordre Data:', boardData.columns.map(col => col.id));
+        console.log(`Synchronisation terminée pour le board ${targetBoardId}`);
+        
+        // Verify consistency after move
+        setTimeout(() => {
+            checkDataConsistency(targetBoardId);
+        }, 50);
+        
+        // Update column indices in DOM
+        updateColumnIndices(targetBoardId);
+        
+        // Save the updated data
+        saveBoardData(targetBoardId);
+    }
+
+    /**
+     * Debug function - Check consistency between DOM and data
+     */
+    function checkDataConsistency(boardId) {
+        console.log(`\n=== VÉRIFICATION COHÉRENCE BOARD ${boardId} ===`);
+        
+        const board = document.getElementById(boardId);
+        if (!board) {
+            console.log('❌ Board non trouvé dans le DOM');
+            return false;
+        }
+        
+        const boardData = kanbanBoards[boardId];
+        if (!boardData) {
+            console.log('❌ Données du board non trouvées');
+            return false;
+        }
+        
+        const columnsContainer = board.querySelector('.kanban-columns');
+        const domColumns = Array.from(columnsContainer.querySelectorAll('.kanban-column'));
+        const dataColumns = boardData.columns;
+        
+        console.log(`📊 DOM: ${domColumns.length} colonnes | Data: ${dataColumns.length} colonnes`);
+        
+        let consistent = true;
+        
+        // Check column count
+        if (domColumns.length !== dataColumns.length) {
+            console.log('❌ Nombre de colonnes différent');
+            consistent = false;
+        }
+        
+        // Check column order and IDs
+        domColumns.forEach((domColumn, index) => {
+            const domId = domColumn.id;
+            const dataColumn = dataColumns[index];
+            
+            if (!dataColumn) {
+                console.log(`❌ Position ${index}: DOM a "${domId}" mais pas de données`);
+                consistent = false;
+                return;
+            }
+            
+            if (domId !== dataColumn.id) {
+                console.log(`❌ Position ${index}: DOM a "${domId}" mais data a "${dataColumn.id}"`);
+                consistent = false;
+            } else {
+                console.log(`✅ Position ${index}: "${domId}" - OK`);
+            }
+        });
+        
+        if (consistent) {
+            console.log('✅ Board parfaitement synchronisé !');
+        } else {
+            console.log('❌ Problèmes de synchronisation détectés');
+        }
+        
+        console.log('=== FIN VÉRIFICATION ===\n');
+        return consistent;
+    }
+
+    /**
+     * Sync DOM with data - fix inconsistencies
+     */
+    function syncDomWithData() {
+        console.log('=== Synchronisation DOM-Data en cours ===');
+        
+        for (let boardId in kanbanBoards) {
+            const board = document.getElementById(boardId);
+            if (!board) continue;
+            
+            const boardData = kanbanBoards[boardId];
+            const columnsContainer = board.querySelector('.kanban-columns');
+            const domColumns = Array.from(columnsContainer.querySelectorAll('.kanban-column'));
+            const dataColumnIds = boardData.columns.map(col => col.id);
+            
+            console.log(`\nBoard ${boardId}:`);
+            console.log('- Colonnes dans les données:', dataColumnIds);
+            console.log('- Colonnes dans le DOM:', domColumns.map(col => col.id));
+            
+            // Method 1: Find columns in DOM but not in data
+            domColumns.forEach(domColumn => {
+                if (!dataColumnIds.includes(domColumn.id)) {
+                    console.log(`→ Colonne orpheline trouvée: ${domColumn.id}`);
+                    
+                    // Try to reconstruct column data from DOM
+                    const titleElement = domColumn.querySelector('.kanban-column-title');
+                    const cardsContainer = domColumn.querySelector('.kanban-cards');
+                    
+                    if (titleElement && cardsContainer) {
+                        const newColumnData = {
+                            id: domColumn.id,
+                            title: titleElement.textContent.trim(),
+                            cards: []
+                        };
+                        
+                        // Add existing cards to column data
+                        const domCards = cardsContainer.querySelectorAll('.kanban-card');
+                        domCards.forEach(card => {
+                            // Basic card data reconstruction
+                            const cardTitle = card.querySelector('.kanban-card-title');
+                            if (cardTitle) {
+                                newColumnData.cards.push({
+                                    id: card.id,
+                                    title: cardTitle.textContent.trim(),
+                                    description: '',
+                                    priority: 'normal',
+                                    created: new Date().toISOString(),
+                                    creator: JSINFO.userinfo?.name || 'Utilisateur'
+                                });
+                            }
+                        });
+                        
+                        // Add to board data
+                        boardData.columns.push(newColumnData);
+                        console.log(`→ Colonne ${domColumn.id} ajoutée aux données:`, newColumnData.title);
+                    }
+                }
+            });
+            
+            // Method 2: Sync order based on DOM
+            const finalDomColumns = Array.from(columnsContainer.querySelectorAll('.kanban-column'));
+            const syncedColumns = [];
+            
+            finalDomColumns.forEach((domColumn, index) => {
+                const dataColumn = boardData.columns.find(col => col.id === domColumn.id);
+                if (dataColumn) {
+                    syncedColumns.push(dataColumn);
+                }
+                // Update DOM index
+                domColumn.dataset.columnIndex = index;
+            });
+            
+            // Update board data with synced order
+            if (syncedColumns.length > 0) {
+                boardData.columns = syncedColumns;
+                console.log('→ Ordre synchronisé:', boardData.columns.map(col => col.title));
+            }
+        }
+        
+        console.log('=== Synchronisation terminée ===\n');
+    }
+
+    /**
+     * Update column indices in DOM
+     */
+    function updateColumnIndices(boardId) {
+        console.log(`=== MISE À JOUR DES INDICES - BOARD ${boardId} ===`);
+        
+        const board = document.getElementById(boardId);
+        if (!board) {
+            console.log('❌ Board non trouvé:', boardId);
+            return;
+        }
+        
+        const columnsContainer = board.querySelector('.kanban-columns');
+        if (!columnsContainer) {
+            console.log('❌ Container de colonnes non trouvé dans le board:', boardId);
+            return;
+        }
+        
+        const columns = columnsContainer.querySelectorAll('.kanban-column');
+        console.log(`📋 Mise à jour des indices pour ${columns.length} colonnes:`);
+        
+        columns.forEach((column, index) => {
+            const oldIndex = column.dataset.columnIndex;
+            column.dataset.columnIndex = index;
+            console.log(`- Colonne ${column.id}: index ${oldIndex} → ${index}`);
+        });
+        
+        // Verify order matches data
+        const boardData = kanbanBoards[boardId];
+        
+        if (boardData) {
+            console.log('📊 Vérification ordre DOM vs Données:');
+            columns.forEach((column, index) => {
+                const dataColumn = boardData.columns[index];
+                const match = dataColumn && dataColumn.id === column.id;
+                const status = match ? '✅' : '❌';
+                console.log(`${status} Position ${index}: DOM="${column.id}" | Data="${dataColumn?.id || 'undefined'}"`);
+            });
+        }
+        
+        console.log('=== FIN MISE À JOUR INDICES ===\n');
     }
 
     /**
@@ -1003,8 +1592,54 @@
         });
     });
 
-    // Export functions needed by modules
-    window.moveCardInData = moveCardInData;
-    window.saveChanges = saveChanges;
+    // Global debugging functions for user convenience
+    window.debugKanban = function(boardId) {
+        if (boardId) {
+            checkDataConsistency(boardId);
+        } else {
+            console.log('=== ÉTAT GLOBAL KANBAN ===');
+            console.log('Boards disponibles:', Object.keys(kanbanBoards));
+            Object.keys(kanbanBoards).forEach(id => {
+                checkDataConsistency(id);
+            });
+        }
+    };
+    
+    window.syncKanban = function(boardId) {
+        if (boardId) {
+            syncDomWithData();
+            updateColumnIndices(boardId);
+            console.log(`Board ${boardId} synchronisé manuellement`);
+        } else {
+            syncDomWithData();
+            Object.keys(kanbanBoards).forEach(id => {
+                updateColumnIndices(id);
+            });
+            console.log('Tous les boards synchronisés manuellement');
+        }
+    };
+    
+    window.debugDragDrop = function(boardId) {
+        console.log('=== DEBUG DRAG & DROP ===');
+        const board = document.getElementById(boardId || Object.keys(kanbanBoards)[0]);
+        if (!board) {
+            console.log('❌ Board non trouvé');
+            return;
+        }
+        
+        console.log('📋 Cartes:');
+        const cards = board.querySelectorAll('.kanban-card');
+        cards.forEach(card => {
+            console.log(`  - ${card.id}: draggable=${card.draggable}, cursor=${card.style.cursor}`);
+        });
+        
+        console.log('📦 Zones de drop:');
+        const zones = board.querySelectorAll('.kanban-cards');
+        zones.forEach(zone => {
+            console.log(`  - ${zone.dataset.column}: events=${zone._dragOverHandler ? 'OK' : 'MANQUANTS'}`);
+        });
+        
+        console.log('=== FIN DEBUG ===');
+    };
 
 })();

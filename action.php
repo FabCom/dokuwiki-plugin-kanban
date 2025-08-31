@@ -43,7 +43,17 @@ class action_plugin_kanban extends ActionPlugin
             'href' => DOKU_BASE . 'lib/plugins/kanban/style.css'
         ];
 
-        // Add JavaScript
+        // Add JavaScript modules in order
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/utils.js'
+        ];
+        
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/dragdrop.js'
+        ];
+        
         $event->data['script'][] = [
             'type' => 'text/javascript',
             'src' => DOKU_BASE . 'lib/plugins/kanban/script.js'
