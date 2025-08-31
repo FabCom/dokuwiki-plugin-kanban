@@ -43,20 +43,30 @@ class action_plugin_kanban extends ActionPlugin
             'href' => DOKU_BASE . 'lib/plugins/kanban/style.css'
         ];
 
-        // Add JavaScript modules in order
+        // Add JavaScript modules in correct dependency order
         $event->data['script'][] = [
             'type' => 'text/javascript',
-            'src' => DOKU_BASE . 'lib/plugins/kanban/utils.js'
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/utils.js'
         ];
         
         $event->data['script'][] = [
             'type' => 'text/javascript',
-            'src' => DOKU_BASE . 'lib/plugins/kanban/dragdrop.js'
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal.js'
         ];
         
         $event->data['script'][] = [
             'type' => 'text/javascript',
-            'src' => DOKU_BASE . 'lib/plugins/kanban/script.js'
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/lockmanagement.js'
+        ];
+        
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/dragdrop.js'
+        ];
+        
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/script.js'
         ];
         
         // User info est ajouté via DOKUWIKI_STARTED hook

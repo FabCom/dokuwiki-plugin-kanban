@@ -314,13 +314,26 @@
     }
 
     /**
-     * Delete a card
+     * Delete a card with confirmation
      */
     function deleteCard(cardId) {
-        if (!confirm('Êtes-vous sûr de vouloir supprimer cette carte ?')) {
-            return;
+        if (window.KanbanModal && window.KanbanModal.showConfirmModal) {
+            window.KanbanModal.showConfirmModal(
+                'Êtes-vous sûr de vouloir supprimer cette carte ?',
+                () => performDeleteCard(cardId)
+            );
+        } else {
+            // Fallback to browser confirm
+            if (confirm('Êtes-vous sûr de vouloir supprimer cette carte ?')) {
+                performDeleteCard(cardId);
+            }
         }
-        
+    }
+
+    /**
+     * Perform actual card deletion
+     */
+    function performDeleteCard(cardId) {
         const cardElement = document.getElementById(cardId);
         const board = cardElement.closest('.kanban-board');
         const boardId = board.id;
@@ -371,13 +384,26 @@
     }
 
     /**
-     * Delete a column
+     * Delete a column with confirmation
      */
     function deleteColumn(columnId) {
-        if (!confirm('Êtes-vous sûr de vouloir supprimer cette colonne et toutes ses cartes ?')) {
-            return;
+        if (window.KanbanModal && window.KanbanModal.showConfirmModal) {
+            window.KanbanModal.showConfirmModal(
+                'Êtes-vous sûr de vouloir supprimer cette colonne et toutes ses cartes ?',
+                () => performDeleteColumn(columnId)
+            );
+        } else {
+            // Fallback to browser confirm
+            if (confirm('Êtes-vous sûr de vouloir supprimer cette colonne et toutes ses cartes ?')) {
+                performDeleteColumn(columnId);
+            }
         }
-        
+    }
+
+    /**
+     * Perform actual column deletion
+     */
+    function performDeleteColumn(columnId) {
         const column = document.getElementById(columnId);
         const board = column.closest('.kanban-board');
         const boardId = board.id;
@@ -429,403 +455,70 @@
     }
 
     /**
-     * Lock a kanban board for editing
+     * Lock a kanban board for editing - Delegate to lock management module
      */
     function lockBoard(boardId) {
-        const board = document.getElementById(boardId);
-        
-        const formData = new FormData();
-        formData.append('call', 'kanban');
-        formData.append('action', 'lock_board');
-        formData.append('page_id', JSINFO.id);
-        
-        return fetch(DOKU_BASE + 'lib/exe/ajax.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Marquer le tableau comme étant en mode édition
-                if (board) board.dataset.editingMode = 'true';
-                
-                showNotification('Mode édition activé', 'success');
-                updateLockUI(boardId, false, null); // isLocked=false car c'est notre verrou
-                return true;
-            } else {
-                showNotification('Impossible d\'activer l\'édition: ' + data.error, 'error');
-                return false;
-            }
-        })
-        .catch(error => {
-            console.error('Erreur d\'activation de l\'édition:', error);
-            showNotification('Erreur d\'activation de l\'édition', 'error');
-            return false;
-        });
+        if (window.KanbanLockManagement && window.KanbanLockManagement.lockBoard) {
+            return window.KanbanLockManagement.lockBoard(boardId);
+        } else {
+            console.error('KanbanLockManagement module not available');
+            showNotification('Module de gestion des verrous non disponible', 'error');
+            return Promise.resolve(false);
+        }
     }
 
     /**
-     * Unlock a kanban board
+     * Unlock a kanban board - Delegate to lock management module
      */
     function unlockBoard(boardId) {
-        const board = document.getElementById(boardId);
-        
-        const formData = new FormData();
-        formData.append('call', 'kanban');
-        formData.append('action', 'unlock_board');
-        formData.append('page_id', JSINFO.id);
-        
-        return fetch(DOKU_BASE + 'lib/exe/ajax.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Désactiver le mode édition
-                if (board) board.dataset.editingMode = 'false';
-                
-                showNotification('Édition terminée', 'success');
-                updateLockUI(boardId, false, null);
-                return true;
-            } else {
-                showNotification('Erreur de fin d\'édition: ' + data.error, 'error');
-                return false;
-            }
-        })
-        .catch(error => {
-            console.error('Erreur de fin d\'édition:', error);
-            showNotification('Erreur de fin d\'édition', 'error');
-            return false;
-        });
+        if (window.KanbanLockManagement && window.KanbanLockManagement.unlockBoard) {
+            return window.KanbanLockManagement.unlockBoard(boardId);
+        } else {
+            console.error('KanbanLockManagement module not available');
+            showNotification('Module de gestion des verrous non disponible', 'error');
+            return Promise.resolve(false);
+        }
     }
 
     /**
-     * Check if a kanban board is locked
+     * Check if a kanban board is locked - Delegate to lock management module
      */
     function checkBoardLock(boardId) {
-        const formData = new FormData();
-        formData.append('call', 'kanban');
-        formData.append('action', 'check_lock');
-        formData.append('page_id', JSINFO.id);
-        
-        return fetch(DOKU_BASE + 'lib/exe/ajax.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            updateLockUI(boardId, data.locked, data.locked_by);
-            return data;
-        })
-        .catch(error => {
-            console.error('Erreur de vérification du verrouillage:', error);
-            return { locked: false, locked_by: null };
-        });
-    }
-
-    /**
-     * Update lock UI elements
-     */
-    function updateLockUI(boardId, isLocked, lockedBy) {
-        const board = document.getElementById(boardId);
-        if (!board) return;
-        
-        // Dans le système DokuWiki:
-        // - isLocked = false signifie "pas verrouillé" OU "verrouillé par moi"  
-        // - isLocked = true + lockedBy = nom signifie "verrouillé par quelqu'un d'autre"
-        
-        // Update lock button
-        const lockButton = board.querySelector('.kanban-lock-button');
-        if (lockButton) {
-            if (isLocked) {
-                // Verrouillé par quelqu'un d'autre
-                lockButton.textContent = '🔒 Verrouillé';
-                lockButton.onclick = null;
-                lockButton.title = `Verrouillé par ${lockedBy}`;
-                lockButton.disabled = true;
-            } else {
-                // Pas verrouillé OU verrouillé par moi
-                lockButton.textContent = '✏️ Éditer';
-                lockButton.onclick = () => lockBoard(boardId);
-                lockButton.title = 'Commencer l\'édition (verrouille le tableau)';
-                lockButton.disabled = false;
-            }
-        }
-        
-        // Update board state selon la logique DokuWiki
-        if (isLocked) {
-            // Verrouillé par quelqu'un d'autre
-            board.classList.add('kanban-locked', 'kanban-locked-other');
-            disableBoardEditing(board);
-            showLockNotification(board, lockedBy);
+        if (window.KanbanLockManagement && window.KanbanLockManagement.checkBoardLock) {
+            return window.KanbanLockManagement.checkBoardLock(boardId);
         } else {
-            // Pas verrouillé OU verrouillé par moi 
-            board.classList.remove('kanban-locked-other');
-            
-            // Si on vient de cliquer sur "Éditer", passer en mode édition
-            // Sinon rester en mode lecture seule
-            if (board.dataset.editingMode === 'true') {
-                board.classList.add('kanban-locked');
-                enableBoardEditing(board);
-                hideLockNotification(board);
-                
-                // Changer le bouton en "Terminer l'édition"
-                const lockButton = board.querySelector('.kanban-lock-button');
-                if (lockButton) {
-                    lockButton.textContent = '✅ Terminer l\'édition';
-                    lockButton.onclick = () => unlockBoard(boardId);
-                    lockButton.title = 'Terminer l\'édition et déverrouiller';
-                }
-            } else {
-                // Mode lecture seule par défaut
-                board.classList.remove('kanban-locked');
-                disableBoardEditing(board);
-                hideLockNotification(board);
-            }
+            console.error('KanbanLockManagement module not available');
+            return Promise.resolve({ locked: false, locked_by: null });
         }
     }
 
     /**
-     * Disable board editing
-     */
-    function disableBoardEditing(board) {
-        // Disable add card buttons
-        board.querySelectorAll('.kanban-add-card').forEach(btn => {
-            btn.disabled = true;
-            btn.style.opacity = '0.5';
-            btn.style.pointerEvents = 'none';
-        });
-        
-        // Hide card action buttons (edit, delete)
-        board.querySelectorAll('.kanban-card-actions').forEach(actions => {
-            actions.style.display = 'none';
-        });
-        
-        // Disable card titles editing
-        board.querySelectorAll('.kanban-card-title').forEach(title => {
-            title.contentEditable = 'false';
-            title.style.cursor = 'default';
-        });
-        
-        // Disable card drag and drop
-        board.querySelectorAll('.kanban-card').forEach(card => {
-            card.draggable = false;
-            card.style.cursor = 'default';
-        });
-        
-        // Disable column management buttons
-        board.querySelectorAll('.kanban-column-header button').forEach(btn => {
-            btn.disabled = true;
-            btn.style.opacity = '0.5';
-            btn.style.pointerEvents = 'none';
-        });
-        
-        // Hide "Ajouter Colonne" button
-        board.querySelectorAll('button[onclick*="addColumn"]').forEach(btn => {
-            btn.style.display = 'none';
-        });
-        
-        // Add visual indicator
-        board.classList.add('kanban-read-only');
-    }
-
-    /**
-     * Enable board editing
-     */
-    function enableBoardEditing(board) {
-        // Enable add card buttons
-        board.querySelectorAll('.kanban-add-card').forEach(btn => {
-            btn.disabled = false;
-            btn.style.opacity = '1';
-            btn.style.pointerEvents = 'auto';
-        });
-        
-        // Show card action buttons (edit, delete)
-        board.querySelectorAll('.kanban-card-actions').forEach(actions => {
-            actions.style.display = 'flex';
-        });
-        
-        // Enable card titles editing
-        board.querySelectorAll('.kanban-card-title').forEach(title => {
-            title.contentEditable = 'true';
-            title.style.cursor = 'text';
-        });
-        
-        // Enable card drag and drop
-        board.querySelectorAll('.kanban-card').forEach(card => {
-            card.draggable = true;
-            card.style.cursor = 'move';
-        });
-        
-        // Enable column management buttons
-        board.querySelectorAll('.kanban-column-header button').forEach(btn => {
-            btn.disabled = false;
-            btn.style.opacity = '1';
-            btn.style.pointerEvents = 'auto';
-        });
-        
-        // Show "Ajouter Colonne" button
-        board.querySelectorAll('button[onclick*="addColumn"]').forEach(btn => {
-            btn.style.display = 'inline-block';
-        });
-        
-        // Remove visual indicator
-        board.classList.remove('kanban-read-only');
-    }
-
-    /**
-     * Show lock notification
-     */
-    function showLockNotification(board, lockedBy) {
-        let notification = board.querySelector('.kanban-lock-notification');
-        if (!notification) {
-            notification = document.createElement('div');
-            notification.className = 'kanban-lock-notification';
-            board.insertBefore(notification, board.firstChild);
-        }
-        
-        notification.innerHTML = `
-            <div class="kanban-lock-message">
-                🔒 Ce tableau est actuellement en cours d'édition par <strong>${escapeHtml(lockedBy)}</strong>
-                <button onclick="window.KanbanPlugin.checkBoardLock('${board.id}')" class="btn-refresh">🔄 Actualiser</button>
-            </div>
-        `;
-        notification.style.display = 'block';
-    }
-
-    /**
-     * Hide lock notification
-     */
-    function hideLockNotification(board) {
-        const notification = board.querySelector('.kanban-lock-notification');
-        if (notification) {
-            notification.style.display = 'none';
-        }
-    }
-
-    /**
-     * Show modal for card editing
+     * Show modal for card editing - Delegate to modal module
      */
     function showCardModal(cardData, callback) {
-        // Create modal HTML
-        const modal = document.createElement('div');
-        modal.className = 'kanban-modal-overlay';
-        modal.innerHTML = `
-            <div class="kanban-modal">
-                <div class="kanban-modal-header">
-                    <h3>Éditer la carte</h3>
-                    <button class="kanban-modal-close">×</button>
-                </div>
-                <div class="kanban-modal-body">
-                    <form class="kanban-card-form">
-                        <!-- Section: Informations principales -->
-                        <div class="kanban-modal-section">
-                            <h4 class="kanban-modal-section-title">📝 Informations principales</h4>
-                            <div class="form-group">
-                                <label for="card-title">Titre *</label>
-                                <input type="text" id="card-title" name="title" value="${escapeHtml(cardData.title)}" 
-                                       required placeholder="Titre de la carte...">
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="card-description">Description</label>
-                                <textarea id="card-description" name="description" rows="3" 
-                                          placeholder="Descritpion...">${escapeHtml(cardData.description || '')}</textarea>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="card-tags">🏷️ Tags (séparés par des virgules)</label>
-                                <input type="text" id="card-tags" name="tags" 
-                                       value="${cardData.tags ? cardData.tags.join(', ') : ''}"
-                                       placeholder="tag1, tag2, ...">
-                            </div>
-                        </div>
-
-                        <!-- Section: Organisation -->
-                        <div class="kanban-modal-section">
-                            <h4 class="kanban-modal-section-title">🎯 Organisation</h4>
-                            <div class="form-group-row">
-                                <div class="form-group form-group-half">
-                                    <label for="card-priority">Priorité</label>
-                                    <select id="card-priority" name="priority">
-                                        <option value="low" ${cardData.priority === 'low' ? 'selected' : ''}>🟢 Basse</option>
-                                        <option value="normal" ${cardData.priority === 'normal' ? 'selected' : ''}>⚪ Normale</option>
-                                        <option value="medium" ${cardData.priority === 'medium' ? 'selected' : ''}>🟡 Moyenne</option>
-                                        <option value="high" ${cardData.priority === 'high' ? 'selected' : ''}>🔴 Haute</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="form-group form-group-half">
-                                    <label for="card-assignee">👤 Assigné à</label>
-                                    <input type="text" id="card-assignee" name="assignee" 
-                                           value="${escapeHtml(cardData.assignee || '')}" 
-                                           placeholder="@utilisateur">
-                                </div>
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="card-due-date">📅 Date d'échéance</label>
-                                <input type="date" id="card-due-date" name="dueDate" value="${cardData.dueDate || ''}">
-                            </div>
-                        </div>
-                        
-                        <div class="form-actions">
-                            <button type="submit" class="kanban-btn kanban-btn-primary">💾 Sauvegarder</button>
-                            <button type="button" class="kanban-btn kanban-btn-secondary kanban-modal-cancel">❌ Annuler</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        // Event listeners
-        const form = modal.querySelector('.kanban-card-form');
-        const closeBtn = modal.querySelector('.kanban-modal-close');
-        const cancelBtn = modal.querySelector('.kanban-modal-cancel');
-        
-        function closeModal() {
-            document.body.removeChild(modal);
+        if (window.KanbanModal && window.KanbanModal.showCardModal) {
+            return window.KanbanModal.showCardModal(cardData, callback);
+        } else {
+            console.error('KanbanModal module not available');
+            // Fallback to browser prompt
+            const title = prompt('Titre de la carte:', cardData.title);
+            if (title !== null) {
+                const updatedData = Object.assign({}, cardData, { title });
+                callback(updatedData);
+            }
         }
-        
-        closeBtn.addEventListener('click', closeModal);
-        cancelBtn.addEventListener('click', closeModal);
-        modal.addEventListener('click', function(e) {
-            if (e.target === modal) closeModal();
-        });
-        
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(form);
-            const updatedData = Object.assign({}, cardData);
-            
-            updatedData.title = formData.get('title');
-            updatedData.description = formData.get('description');
-            updatedData.priority = formData.get('priority');
-            updatedData.assignee = formData.get('assignee');
-            updatedData.dueDate = formData.get('dueDate');
-            updatedData.tags = formData.get('tags').split(',').map(tag => tag.trim()).filter(tag => tag);
-            
-            closeModal();
-            callback(updatedData);
-        });
-        
-        // Focus on title field
-        modal.querySelector('#card-title').focus();
     }
 
     /**
-     * Initialize board interactions (drag & drop, etc.)
+     * Initialize board interactions - Delegate to lock management
      */
     function initializeBoardInteractions(board) {
-        // Disable editing by default (read-only mode)
-        disableBoardEditing(board);
-        
-        // Check lock status and update UI accordingly
-        checkBoardLock(board.id);
+        // Initialize lock management
+        if (window.KanbanLockManagement && window.KanbanLockManagement.initializeBoardLockManagement) {
+            window.KanbanLockManagement.initializeBoardLockManagement(board);
+        } else {
+            console.warn('KanbanLockManagement module not available');
+        }
         
         if (board.dataset.sortable === 'true') {
             // Setup drag and drop for existing cards (will be disabled until unlocked)
@@ -967,25 +660,6 @@
     } else {
         initializeKanbanBoards();
     }
-
-    // Auto-unlock on page unload
-    window.addEventListener('beforeunload', function() {
-        Object.keys(kanbanBoards).forEach(boardId => {
-            const board = document.getElementById(boardId);
-            if (board && board.classList.contains('kanban-locked')) {
-                // Synchronous unlock request
-                const formData = new FormData();
-                formData.append('call', 'kanban');
-                formData.append('action', 'unlock_board');
-                formData.append('page_id', JSINFO.id);
-                
-                // Use sendBeacon for reliable unload handling
-                if (navigator.sendBeacon) {
-                    navigator.sendBeacon(DOKU_BASE + 'lib/exe/ajax.php', formData);
-                }
-            }
-        });
-    });
 
     // Export functions needed by modules
     window.moveCardInData = moveCardInData;
