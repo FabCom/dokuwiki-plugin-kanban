@@ -1,6 +1,7 @@
 /**
- * Kanban Plugin JavaScript - JSON-First Architecture
- * @version 2.0.0
+ * Kanban Plugin JavaScript - Modular Architecture
+ * Core functionality with delegation to specialized modules
+ * @version 2.1.0
  */
 
 (function() {
@@ -186,17 +187,17 @@
     }
 
     /**
-     * Format date consistently
+     * Format date consistently - Delegate to utils module
      */
     function formatDate(dateString) {
+        if (window.KanbanUtils && window.KanbanUtils.formatDate) {
+            return window.KanbanUtils.formatDate(dateString);
+        }
+        // Fallback if utils not loaded
         if (!dateString) return '';
-        
         try {
             const date = new Date(dateString);
-            if (isNaN(date.getTime())) {
-                // Si ce n'est pas une date valide, retourner tel quel
-                return dateString;
-            }
+            if (isNaN(date.getTime())) return dateString;
             return date.toLocaleDateString('fr-FR');
         } catch (error) {
             return dateString;
@@ -204,16 +205,24 @@
     }
 
     /**
-     * Get current user from JSINFO
+     * Get current user - Delegate to utils module
      */
     function getCurrentUser() {
+        if (window.KanbanUtils && window.KanbanUtils.getCurrentUser) {
+            return window.KanbanUtils.getCurrentUser();
+        }
+        // Fallback if utils not loaded
         return JSINFO?.kanban_user || JSINFO?.userinfo?.name || JSINFO?.client || 'Utilisateur';
     }
 
     /**
-     * Get current date time
+     * Get current date time - Delegate to utils module
      */
     function getCurrentDateTime() {
+        if (window.KanbanUtils && window.KanbanUtils.getCurrentDateTime) {
+            return window.KanbanUtils.getCurrentDateTime();
+        }
+        // Fallback if utils not loaded
         return new Date().toISOString().slice(0, 19).replace('T', ' ');
     }
 
@@ -231,7 +240,7 @@
         if (!columnData) return;
         
         // Create new card data
-        const cardId = 'card_' + Date.now();
+        const cardId = window.KanbanUtils?.generateId('card') || 'card_' + Date.now();
         const newCardData = {
             id: cardId,
             title: 'Nouvelle carte',
@@ -344,7 +353,7 @@
         if (!columnTitle) return;
         
         const newColumn = {
-            id: 'col_' + Date.now(),
+            id: window.KanbanUtils?.generateId('col') || 'col_' + Date.now(),
             title: columnTitle,
             cards: []
         };
@@ -892,20 +901,25 @@
     }
 
     /**
-     * Show notification
+     * Show notification - Delegate to utils module
      */
     function showNotification(message, type = 'info') {
-        const notification = document.createElement('div');
-        notification.className = `kanban-notification kanban-notification-${type}`;
-        notification.textContent = message;
-        
-        document.body.appendChild(notification);
-        
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, 3000);
+        if (window.KanbanUtils && window.KanbanUtils.showNotification) {
+            window.KanbanUtils.showNotification(message, type);
+        } else {
+            // Fallback if utils not loaded
+            const notification = document.createElement('div');
+            notification.className = `kanban-notification kanban-notification-${type}`;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 3000);
+        }
     }
 
     /**
@@ -917,9 +931,13 @@
     }
 
     /**
-     * Escape HTML to prevent XSS
+     * Escape HTML to prevent XSS - Delegate to utils module
      */
     function escapeHtml(text) {
+        if (window.KanbanUtils && window.KanbanUtils.escapeHtml) {
+            return window.KanbanUtils.escapeHtml(text);
+        }
+        // Fallback if utils not loaded
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
@@ -951,40 +969,6 @@
     }
 
     // Auto-unlock on page unload
-    // Smart tooltip positioning
-    function initializeSmartTooltips() {
-        document.addEventListener('mouseover', function(e) {
-            if (e.target.classList.contains('kanban-tooltip')) {
-                const tooltip = e.target;
-                setTimeout(() => {
-                    const tooltipRect = tooltip.getBoundingClientRect();
-                    const viewportWidth = window.innerWidth;
-                    const column = tooltip.closest('.kanban-column');
-                    
-                    if (column) {
-                        const columnRect = column.getBoundingClientRect();
-                        const isFirstColumn = column.previousElementSibling === null;
-                        const isLastColumn = column.nextElementSibling === null;
-                        
-                        // Ajouter des classes pour le positionnement CSS
-                        tooltip.classList.remove('tooltip-left', 'tooltip-right', 'tooltip-center');
-                        
-                        if (isFirstColumn) {
-                            tooltip.classList.add('tooltip-left');
-                        } else if (isLastColumn) {
-                            tooltip.classList.add('tooltip-right');
-                        } else {
-                            tooltip.classList.add('tooltip-center');
-                        }
-                    }
-                }, 10);
-            }
-        });
-    }
-
-    // Initialize smart tooltips
-    initializeSmartTooltips();
-
     window.addEventListener('beforeunload', function() {
         Object.keys(kanbanBoards).forEach(boardId => {
             const board = document.getElementById(boardId);
