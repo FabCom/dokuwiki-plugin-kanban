@@ -204,6 +204,12 @@
             btn.style.display = 'none';
         });
         
+        // Remove column reorder button if present
+        const reorderButton = board.querySelector('.kanban-reorder-button');
+        if (reorderButton) {
+            reorderButton.remove();
+        }
+        
         // Add visual indicator
         board.classList.add('kanban-read-only');
     }
@@ -247,6 +253,34 @@
         board.querySelectorAll('button[onclick*="addColumn"]').forEach(btn => {
             btn.style.display = 'inline-block';
         });
+        
+        // Add column reorder button if not present
+        const actionsDiv = board.querySelector('.kanban-actions');
+        if (actionsDiv && !actionsDiv.querySelector('.kanban-reorder-button')) {
+            const lockButton = actionsDiv.querySelector('.kanban-lock-button');
+            const reorderButton = document.createElement('button');
+            reorderButton.className = 'kanban-btn kanban-btn-secondary kanban-reorder-button';
+            reorderButton.innerHTML = '🔄 Réorganiser colonnes';
+            reorderButton.title = 'Réorganiser les colonnes';
+            reorderButton.onclick = function() {
+                // Direct call - should work since script.js loads after lockmanagement.js
+                if (window.showColumnOrderModal) {
+                    window.showColumnOrderModal(board.id);
+                } else if (window.KanbanPlugin && window.KanbanPlugin.showColumnOrderModal) {
+                    window.KanbanPlugin.showColumnOrderModal(board.id);
+                } else {
+                    console.error('showColumnOrderModal function not available');
+                    alert('Fonction de réorganisation non disponible. Veuillez recharger la page.');
+                }
+            };
+            
+            // Insert after lock button
+            if (lockButton && lockButton.nextSibling) {
+                actionsDiv.insertBefore(reorderButton, lockButton.nextSibling);
+            } else {
+                actionsDiv.appendChild(reorderButton);
+            }
+        }
         
         // Remove visual indicator
         board.classList.remove('kanban-read-only');

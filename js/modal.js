@@ -263,8 +263,115 @@
     }
 
     /**
-     * Show confirmation modal
+     * Show modal for column order management
      */
+    function showColumnOrderModal(boardData, callback) {
+        const modal = createModal('column-order-modal', 'Réorganiser les colonnes', createColumnOrderForm(boardData));
+        
+        // Event listeners
+        const form = modal.querySelector('.kanban-column-order-form');
+        const moveUpButtons = modal.querySelectorAll('.move-up');
+        const moveDownButtons = modal.querySelectorAll('.move-down');
+        
+        // Update button states
+        function updateButtonStates() {
+            const items = form.querySelectorAll('.column-order-item');
+            items.forEach((item, index) => {
+                const moveUp = item.querySelector('.move-up');
+                const moveDown = item.querySelector('.move-down');
+                
+                moveUp.disabled = index === 0;
+                moveDown.disabled = index === items.length - 1;
+            });
+        }
+        
+        // Move up handler
+        moveUpButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const item = this.closest('.column-order-item');
+                const prev = item.previousElementSibling;
+                if (prev) {
+                    item.parentNode.insertBefore(item, prev);
+                    updateButtonStates();
+                }
+            });
+        });
+        
+        // Move down handler
+        moveDownButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const item = this.closest('.column-order-item');
+                const next = item.nextElementSibling;
+                if (next) {
+                    item.parentNode.insertBefore(next, item);
+                    updateButtonStates();
+                }
+            });
+        });
+        
+        // Initial button state update
+        updateButtonStates();
+        
+        // Form submit
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Get new order
+            const items = form.querySelectorAll('.column-order-item');
+            const newOrder = Array.from(items).map(item => parseInt(item.dataset.originalIndex));
+            
+            closeModal(modal);
+            callback(newOrder);
+        });
+        
+        return modal;
+    }
+
+    /**
+     * Create column order form HTML
+     */
+    function createColumnOrderForm(boardData) {
+        const escapeHtml = window.KanbanUtils?.escapeHtml || ((text) => {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        });
+
+        let html = `
+            <form class="kanban-column-order-form">
+                <div class="kanban-modal-section">
+                    <h4 class="kanban-modal-section-title">🏛️ Ordre des colonnes</h4>
+                    <p style="color: #6c757d; margin-bottom: 20px;">Utilisez les boutons ↑ ↓ pour réorganiser les colonnes.</p>
+                    <div class="column-order-list">`;
+        
+        boardData.columns.forEach((column, index) => {
+            const cardCount = column.cards ? column.cards.length : 0;
+            html += `
+                <div class="column-order-item" data-original-index="${index}">
+                    <div class="column-order-info">
+                        <div class="column-order-title">${escapeHtml(column.title)}</div>
+                        <div class="column-order-meta">${cardCount} carte${cardCount !== 1 ? 's' : ''}</div>
+                    </div>
+                    <div class="column-order-actions">
+                        <button type="button" class="kanban-btn-icon move-up" title="Monter">↑</button>
+                        <button type="button" class="kanban-btn-icon move-down" title="Descendre">↓</button>
+                    </div>
+                </div>`;
+        });
+        
+        html += `
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="kanban-btn kanban-btn-primary">💾 Appliquer l'ordre</button>
+                    <button type="button" class="kanban-btn kanban-btn-secondary kanban-modal-cancel">❌ Annuler</button>
+                </div>
+            </form>
+        `;
+        
+        return html;
+    }
     function showConfirmModal(message, onConfirm, onCancel = null) {
         const modal = createModal('confirm-modal', 'Confirmation', `
             <div class="kanban-modal-section">
@@ -306,6 +413,7 @@
     window.KanbanModal = {
         showCardModal,
         showColumnModal,
+        showColumnOrderModal,
         showConfirmModal,
         createModal,
         closeModal

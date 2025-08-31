@@ -799,6 +799,69 @@
     border-color: #dc3545;
 }
 
+/* ===== COLUMN ORDER MODAL STYLES ===== */
+.column-order-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.column-order-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.column-order-item:hover {
+    border-color: #007cba;
+    box-shadow: 0 2px 8px rgba(0, 124, 186, 0.1);
+}
+
+.column-order-info {
+    flex: 1;
+}
+
+.column-order-title {
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 4px;
+}
+
+.column-order-meta {
+    font-size: 12px;
+    color: #6c757d;
+}
+
+.column-order-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.column-order-actions .kanban-btn-icon {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.column-order-actions .kanban-btn-icon:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    background: #f8f9fa;
+}
+
+.column-order-actions .kanban-btn-icon:not(:disabled):hover {
+    background: #007cba;
+    color: white;
+}
+
 .kanban-modal-btn-danger:hover {
     background: #c82333;
     border-color: #c82333;

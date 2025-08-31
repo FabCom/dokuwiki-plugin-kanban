@@ -61,7 +61,7 @@
                     <button class="kanban-btn kanban-lock-button" onclick="window.KanbanPlugin.lockBoard('${boardContainer.id}')" title="Commencer l'édition">
                         ✏️ Éditer
                     </button>
-                    <button class="kanban-btn kanban-btn-primary" onclick="KanbanPlugin.addColumn('${boardContainer.id}')">
+                    <button class="kanban-btn kanban-btn-primary" onclick="window.KanbanPlugin.addColumn('${boardContainer.id}')">
                         Ajouter Colonne
                     </button>
                 </div>`;
@@ -356,8 +356,50 @@
     }
 
     /**
-     * Add a new column
+     * Show column order modal
      */
+    function showColumnOrderModal(boardId) {
+        const board = document.getElementById(boardId);
+        const boardData = kanbanBoards[boardId];
+        
+        if (!boardData || !boardData.columns) {
+            showNotification('Données du tableau non trouvées', 'error');
+            return;
+        }
+        
+        if (window.KanbanModal && window.KanbanModal.showColumnOrderModal) {
+            window.KanbanModal.showColumnOrderModal(boardData, function(newOrder) {
+                // Apply new order
+                reorderColumns(boardId, newOrder);
+            });
+        } else {
+            showNotification('Module modal non disponible', 'error');
+        }
+    }
+
+    /**
+     * Reorder columns based on new order array
+     */
+    function reorderColumns(boardId, newOrder) {
+        const board = document.getElementById(boardId);
+        const boardData = kanbanBoards[boardId];
+        // Reorder data
+        const reorderedColumns = newOrder.map(index => boardData.columns[index]);
+        boardData.columns = reorderedColumns;
+        // Re-render the board
+        renderBoard(board, boardData);
+        // Re-initialize interactions
+        initializeBoardInteractions(board);
+        // Réappliquer le mode édition si actif
+        if (board.dataset.editingMode === 'true' && window.KanbanLockManagement) {
+            window.KanbanLockManagement.enableBoardEditing(board);
+            // Forcer la mise à jour du lock UI avec l'utilisateur courant
+            window.KanbanLockManagement.updateLockUI(boardId, false, JSINFO.user);
+        }
+        // Save changes
+        saveChanges(boardId, 'reorder_columns');
+        showNotification('Colonnes réorganisées avec succès', 'success');
+    }
     function addColumn(boardId) {
         const board = document.getElementById(boardId);
         const boardData = kanbanBoards[boardId];
@@ -643,6 +685,7 @@
         deleteCard,
         addColumn,
         deleteColumn,
+        showColumnOrderModal,
         
         // Lock management
         lockBoard,
@@ -664,5 +707,6 @@
     // Export functions needed by modules
     window.moveCardInData = moveCardInData;
     window.saveChanges = saveChanges;
+    window.showColumnOrderModal = showColumnOrderModal; // Direct export for fallback
 
 })();
