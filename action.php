@@ -786,12 +786,28 @@ class action_plugin_kanban extends ActionPlugin
             }
         }
         
+        // Récupérer l'utilisateur actuel avec la même logique que lockBoard
+        $currentUser = 'Utilisateur'; // Fallback par défaut
+        
+        if (!empty($_SERVER['REMOTE_USER'])) {
+            $currentUser = $_SERVER['REMOTE_USER'];
+        } elseif (!empty($INFO['client'])) {
+            $currentUser = $INFO['client'];
+        } elseif (!empty($INFO['userinfo']['name'])) {
+            $currentUser = $INFO['userinfo']['name'];
+        } elseif (!empty($INFO['userinfo']['mail'])) {
+            $currentUser = $INFO['userinfo']['mail'];
+        }
+        
+        // Si la page est verrouillée par l'utilisateur actuel, considérer comme "pas verrouillée" côté client
+        $isLockedByOther = $lockedBy && ($lockedBy !== $currentUser);
+        
         // Debug logging
-        error_log("Kanban Debug - checkBoardLock: pageId=$pageId, lockedBy=" . var_export($lockedBy, true));
+        error_log("Kanban Debug - checkBoardLock: pageId=$pageId, lockedBy=" . var_export($lockedBy, true) . ", currentUser=" . var_export($currentUser, true) . ", isLockedByOther=" . var_export($isLockedByOther, true));
         
         echo json_encode([
-            'locked' => (bool)$lockedBy,
-            'locked_by' => $lockedBy ?: null,
+            'locked' => $isLockedByOther,
+            'locked_by' => $isLockedByOther ? $lockedBy : null,
             'page_id' => $pageId
         ]);
     }
