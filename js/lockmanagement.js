@@ -29,6 +29,10 @@
                 
                 showNotification('Mode édition activé', 'success');
                 updateLockUI(boardId, false, null); // isLocked=false car c'est notre verrou
+                
+                // Démarrer le renouvellement automatique du verrou
+                startLockRenewal(boardId);
+                
                 return true;
             } else {
                 showNotification('Impossible d\'activer l\'édition: ' + data.error, 'error');
@@ -63,6 +67,9 @@
                 // Désactiver le mode édition
                 if (board) board.dataset.editingMode = 'false';
                 
+                // Arrêter le renouvellement du verrou
+                stopLockRenewal(boardId);
+                
                 showNotification('Édition terminée', 'success');
                 updateLockUI(boardId, false, null);
                 return true;
@@ -75,6 +82,65 @@
             console.error('Erreur de fin d\'édition:', error);
             showNotification('Erreur de fin d\'édition', 'error');
             return false;
+        });
+    }
+
+    // Variables pour gérer le renouvellement des verrous
+    const lockRenewalIntervals = new Map();
+
+    /**
+     * Start automatic lock renewal for a board
+     */
+    function startLockRenewal(boardId) {
+        // Arrêter un éventuel renouvellement existant
+        stopLockRenewal(boardId);
+        
+        // Renouveler le verrou toutes les 10 minutes (600 secondes)
+        // Soit 2/3 du timeout DokuWiki de 15 minutes
+        const renewalInterval = setInterval(() => {
+            renewLock(boardId);
+        }, 600000); // 10 minutes
+        
+        lockRenewalIntervals.set(boardId, renewalInterval);
+        console.log(`Lock renewal started for board ${boardId}`);
+    }
+
+    /**
+     * Stop automatic lock renewal for a board
+     */
+    function stopLockRenewal(boardId) {
+        const interval = lockRenewalIntervals.get(boardId);
+        if (interval) {
+            clearInterval(interval);
+            lockRenewalIntervals.delete(boardId);
+            console.log(`Lock renewal stopped for board ${boardId}`);
+        }
+    }
+
+    /**
+     * Renew lock for a board
+     */
+    function renewLock(boardId) {
+        const formData = new FormData();
+        formData.append('call', 'kanban');
+        formData.append('action', 'renew_lock');
+        formData.append('page_id', JSINFO.id);
+        
+        fetch(DOKU_BASE + 'lib/exe/ajax.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (!data.success) {
+                console.warn('Lock renewal failed for board ' + boardId + ':', data.error);
+                // En cas d'échec, arrêter le renouvellement et vérifier l'état
+                stopLockRenewal(boardId);
+                checkBoardLock(boardId);
+            }
+        })
+        .catch(error => {
+            console.error('Lock renewal error for board ' + boardId + ':', error);
         });
     }
 
@@ -327,6 +393,13 @@
      */
     function setupAutoUnlock() {
         window.addEventListener('beforeunload', function() {
+            // Arrêter tous les renouvellements de verrous
+            lockRenewalIntervals.forEach((interval, boardId) => {
+                clearInterval(interval);
+                console.log(`Lock renewal stopped for board ${boardId} due to page unload`);
+            });
+            lockRenewalIntervals.clear();
+            
             // Get all boards that might be locked by current user
             const boards = document.querySelectorAll('.kanban-board.kanban-locked:not(.kanban-locked-other)');
             

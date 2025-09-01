@@ -250,6 +250,9 @@ class action_plugin_kanban extends ActionPlugin
                 case 'get_board_data':
                     $this->getBoardData();
                     break;
+                case 'renew_lock':
+                    $this->renewLock();
+                    break;
                 default:
                     http_response_code(400);
                     echo json_encode(['error' => 'Action non reconnue']);
@@ -708,16 +711,19 @@ class action_plugin_kanban extends ActionPlugin
             
             error_log("Kanban Debug - lockBoard: Utilisateur détecté = '$currentUser' (sources: REMOTE_USER='" . ($_SERVER['REMOTE_USER'] ?? 'vide') . "', client='" . ($INFO['client'] ?? 'vide') . "', name='" . ($INFO['userinfo']['name'] ?? 'vide') . "')");
             
-            // Créer notre propre fichier de verrouillage
+            // Créer notre propre fichier de verrouillage avec timestamp
             $lockDir = DOKU_INC . 'data/locks/';
             if (!is_dir($lockDir)) {
                 mkdir($lockDir, 0755, true);
             }
             $lockFile = $lockDir . str_replace(':', '_', $pageId) . '.kanban.lock';
-            file_put_contents($lockFile, $currentUser);
+            
+            // Stocker utilisateur et timestamp (format: "utilisateur|timestamp")
+            $lockData = $currentUser . '|' . time();
+            file_put_contents($lockFile, $lockData);
             
             $lockedBy = $currentUser;
-            error_log("Kanban Debug - lockBoard: Verrou créé pour '$currentUser' dans $lockFile");
+            error_log("Kanban Debug - lockBoard: Verrou créé pour '$currentUser' dans $lockFile avec timestamp");
         }
         
         // Restaurer l'ID original
@@ -782,7 +788,30 @@ class action_plugin_kanban extends ActionPlugin
         if (!$lockedBy) {
             $lockFile = DOKU_INC . 'data/locks/' . str_replace(':', '_', $pageId) . '.kanban.lock';
             if (file_exists($lockFile)) {
-                $lockedBy = file_get_contents($lockFile);
+                $lockContent = file_get_contents($lockFile);
+                
+                // Vérifier si le format inclut un timestamp
+                if (strpos($lockContent, '|') !== false) {
+                    list($lockUser, $lockTime) = explode('|', $lockContent, 2);
+                    
+                    // Vérifier l'expiration (15 minutes = 900 secondes, comme DokuWiki)
+                    global $conf;
+                    $locktime = isset($conf['locktime']) ? $conf['locktime'] : 900;
+                    
+                    if (time() - $lockTime > $locktime) {
+                        // Verrou expiré, le supprimer
+                        unlink($lockFile);
+                        error_log("Kanban Debug - checkBoardLock: Verrou expiré pour '$lockUser', supprimé");
+                        $lockedBy = null;
+                    } else {
+                        $lockedBy = $lockUser;
+                    }
+                } else {
+                    // Ancien format sans timestamp, considérer comme expiré
+                    unlink($lockFile);
+                    error_log("Kanban Debug - checkBoardLock: Ancien verrou sans timestamp supprimé");
+                    $lockedBy = null;
+                }
             }
         }
         
@@ -848,6 +877,69 @@ class action_plugin_kanban extends ActionPlugin
                 'error' => 'Aucune donnée kanban trouvée'
             ]);
         }
+    }
+
+    /**
+     * Renew lock for a board
+     */
+    private function renewLock()
+    {
+        global $INPUT, $INFO;
+        
+        $pageId = $INPUT->str('page_id');
+        if (empty($pageId)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'ID de page manquant']);
+            return;
+        }
+
+        // Récupérer l'utilisateur actuel
+        $currentUser = 'Utilisateur';
+        if (!empty($_SERVER['REMOTE_USER'])) {
+            $currentUser = $_SERVER['REMOTE_USER'];
+        } elseif (!empty($INFO['client'])) {
+            $currentUser = $INFO['client'];
+        } elseif (!empty($INFO['userinfo']['name'])) {
+            $currentUser = $INFO['userinfo']['name'];
+        } elseif (!empty($INFO['userinfo']['mail'])) {
+            $currentUser = $INFO['userinfo']['mail'];
+        }
+
+        // Vérifier que l'utilisateur actuel détient le verrou
+        $lockFile = DOKU_INC . 'data/locks/' . str_replace(':', '_', $pageId) . '.kanban.lock';
+        
+        if (!file_exists($lockFile)) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Aucun verrou trouvé']);
+            return;
+        }
+
+        $lockContent = file_get_contents($lockFile);
+        if (strpos($lockContent, '|') !== false) {
+            list($lockUser, $lockTime) = explode('|', $lockContent, 2);
+            
+            if ($lockUser !== $currentUser) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Verrou détenu par un autre utilisateur']);
+                return;
+            }
+        } else {
+            // Ancien format, supprimer et dire qu'il n'y a plus de verrou
+            unlink($lockFile);
+            http_response_code(404);
+            echo json_encode(['error' => 'Verrou expiré ou invalide']);
+            return;
+        }
+
+        // Renouveler le verrou avec nouveau timestamp
+        $lockData = $currentUser . '|' . time();
+        file_put_contents($lockFile, $lockData);
+
+        echo json_encode([
+            'success' => true,
+            'message' => 'Verrou renouvelé',
+            'renewed_at' => time()
+        ]);
     }
 
     /**
