@@ -306,7 +306,7 @@
         notification.innerHTML = `
             <div class="kanban-lock-message">
                 🔒 Ce tableau est actuellement en cours d'édition par <strong>${escapeHtml(lockedBy)}</strong>
-                <button onclick="window.KanbanLockManagement.checkBoardLock('${board.id}')" class="btn-refresh">🔄 Actualiser</button>
+                <button onclick="window.KanbanLockManagement.checkBoardLock('${board.id}'); window.refreshBoardData && window.refreshBoardData('${board.id}')" class="btn-refresh">🔄 Actualiser</button>
             </div>
         `;
         notification.style.display = 'block';

@@ -393,8 +393,7 @@
         // Réappliquer le mode édition si actif
         if (board.dataset.editingMode === 'true' && window.KanbanLockManagement) {
             window.KanbanLockManagement.enableBoardEditing(board);
-            // Forcer la mise à jour du lock UI avec l'utilisateur courant
-            window.KanbanLockManagement.updateLockUI(boardId, false, JSINFO.user);
+            // Ne pas appeler updateLockUI car cela interfère avec l'état actuel
         }
         // Save changes
         saveChanges(boardId, 'reorder_columns');
@@ -708,5 +707,55 @@
     window.moveCardInData = moveCardInData;
     window.saveChanges = saveChanges;
     window.showColumnOrderModal = showColumnOrderModal; // Direct export for fallback
+    window.refreshBoardData = refreshBoardData; // Export for refresh functionality
+
+    function refreshBoardData(boardId) {
+        const board = document.getElementById(boardId);
+        if (!board) return;
+        
+        // Requête AJAX pour récupérer les données les plus récentes
+        const formData = new FormData();
+        formData.append('call', 'kanban');
+        formData.append('action', 'get_board_data');
+        formData.append('page_id', JSINFO.id);
+        
+        fetch(DOKU_BASE + 'lib/exe/ajax.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.board_data) {
+                // Mettre à jour les données locales
+                const boardData = data.board_data;
+                boardData.title = board.dataset.title || boardData.title || 'Kanban Board';
+                window.kanbanBoards[boardId] = boardData;
+                
+                // Réafficher le tableau avec les nouvelles données
+                renderBoard(board, boardData);
+                initializeBoardInteractions(board);
+                
+                showNotification('Tableau mis à jour', 'success');
+            } else {
+                // Fallback : recharger depuis le JSON embarqué
+                const jsonScript = board.querySelector('.kanban-data');
+                if (jsonScript) {
+                    try {
+                        const boardData = JSON.parse(jsonScript.textContent);
+                        boardData.title = board.dataset.title || boardData.title || 'Kanban Board';
+                        window.kanbanBoards[boardId] = boardData;
+                        renderBoard(board, boardData);
+                        initializeBoardInteractions(board);
+                    } catch (error) {
+                        console.error('Erreur lors du rechargement des données kanban:', error);
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Erreur lors de la récupération des données:', error);
+            showNotification('Erreur lors de la mise à jour', 'error');
+        });
+    }
 
 })();

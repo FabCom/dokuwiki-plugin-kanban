@@ -247,6 +247,9 @@ class action_plugin_kanban extends ActionPlugin
                 case 'check_lock':
                     $this->checkBoardLock();
                     break;
+                case 'get_board_data':
+                    $this->getBoardData();
+                    break;
                 default:
                     http_response_code(400);
                     echo json_encode(['error' => 'Action non reconnue']);
@@ -682,17 +685,28 @@ class action_plugin_kanban extends ActionPlugin
         
         // Si le verrouillage natif ne fonctionne pas, utiliser une approche alternative
         if (!$lockedBy) {
-            // Utiliser la même structure que DokuWiki pour le nom d'utilisateur
-            // Examiner $INFO pour voir ce qui est disponible
-            $currentUser = 'Utilisateur';
+            // Récupérer le nom d'utilisateur de plusieurs sources possibles
+            global $conf;
+            $currentUser = 'Utilisateur'; // Fallback par défaut
             
-            if (!empty($INFO['userinfo']['name'])) {
+            // Source 1: Variable globale DokuWiki
+            if (!empty($_SERVER['REMOTE_USER'])) {
+                $currentUser = $_SERVER['REMOTE_USER'];
+            }
+            // Source 2: INFO structure
+            elseif (!empty($INFO['client'])) {
+                $currentUser = $INFO['client'];
+            }
+            // Source 3: Userinfo name
+            elseif (!empty($INFO['userinfo']['name'])) {
                 $currentUser = $INFO['userinfo']['name'];
-            } elseif (!empty($INFO['userinfo']['mail'])) {
+            }
+            // Source 4: Userinfo mail comme fallback
+            elseif (!empty($INFO['userinfo']['mail'])) {
                 $currentUser = $INFO['userinfo']['mail'];
             }
             
-            error_log("Kanban Debug - lockBoard: INFO structure = " . print_r($INFO, true));
+            error_log("Kanban Debug - lockBoard: Utilisateur détecté = '$currentUser' (sources: REMOTE_USER='" . ($_SERVER['REMOTE_USER'] ?? 'vide') . "', client='" . ($INFO['client'] ?? 'vide') . "', name='" . ($INFO['userinfo']['name'] ?? 'vide') . "')");
             
             // Créer notre propre fichier de verrouillage
             $lockDir = DOKU_INC . 'data/locks/';
@@ -703,7 +717,7 @@ class action_plugin_kanban extends ActionPlugin
             file_put_contents($lockFile, $currentUser);
             
             $lockedBy = $currentUser;
-            error_log("Kanban Debug - lockBoard: Utilisation système alternatif, currentUser=" . var_export($currentUser, true));
+            error_log("Kanban Debug - lockBoard: Verrou créé pour '$currentUser' dans $lockFile");
         }
         
         // Restaurer l'ID original
@@ -780,5 +794,91 @@ class action_plugin_kanban extends ActionPlugin
             'locked_by' => $lockedBy ?: null,
             'page_id' => $pageId
         ]);
+    }
+
+    /**
+     * Get current board data from the page
+     */
+    private function getBoardData()
+    {
+        global $INPUT;
+        
+        $pageId = $INPUT->str('page_id');
+        if (empty($pageId)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'ID de page manquant']);
+            return;
+        }
+
+        // Get the current page content
+        $text = rawWiki($pageId);
+        if ($text === false) {
+            http_response_code(404);
+            echo json_encode(['error' => 'Page non trouvée']);
+            return;
+        }
+
+        // Extract kanban data from the page
+        $boardData = $this->extractKanbanData($text);
+        
+        if ($boardData) {
+            echo json_encode([
+                'success' => true,
+                'board_data' => $boardData
+            ]);
+        } else {
+            echo json_encode([
+                'success' => false,
+                'error' => 'Aucune donnée kanban trouvée'
+            ]);
+        }
+    }
+
+    /**
+     * Extract kanban data from wiki text
+     */
+    private function extractKanbanData($text)
+    {
+        // Find kanban blocks in the text
+        $pattern = '/\<kanban[^>]*\>(.*?)\<\/kanban\>/s';
+        preg_match($pattern, $text, $matches);
+        
+        if (!isset($matches[1])) {
+            return null;
+        }
+        
+        $content = trim($matches[1]);
+        
+        // Try to parse as JSON first
+        $jsonData = json_decode($content, true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            // If it's a complete board structure, return it
+            if (isset($jsonData['columns'])) {
+                return $jsonData;
+            }
+            // If it's just columns, wrap in board structure
+            if (is_array($jsonData) && isset($jsonData[0]['id'])) {
+                return [
+                    'title' => 'Kanban Board',
+                    'columns' => $jsonData
+                ];
+            }
+        }
+        
+        // Fallback: parse as simple column list
+        $columnsArray = explode(',', $content ?: 'À faire,En cours,Terminé');
+        $columns = array();
+        foreach ($columnsArray as $columnTitle) {
+            $columns[] = array(
+                'id' => uniqid('col_'),
+                'title' => trim($columnTitle),
+                'cards' => array()
+            );
+        }
+        
+        return [
+            'title' => 'Kanban Board',
+            'columns' => $columns
+        ];
     }
 }
