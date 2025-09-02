@@ -49,9 +49,30 @@ class action_plugin_kanban extends ActionPlugin
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/utils.js'
         ];
         
+        // Modal modules (core first, then specialized modules)
         $event->data['script'][] = [
             'type' => 'text/javascript',
-            'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal.js'
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-core.js'
+        ];
+        
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-cards.js'
+        ];
+        
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-columns.js'
+        ];
+        
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-links.js'
+        ];
+        
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-main.js'
         ];
         
         $event->data['script'][] = [

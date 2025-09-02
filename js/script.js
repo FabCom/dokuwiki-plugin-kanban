@@ -139,8 +139,9 @@
                 <div class="kanban-card-actions">
                     ${creatorTooltip ? `<span class="kanban-info-icon kanban-creator-icon kanban-tooltip" title="${creatorTooltip}">🏗️</span>` : ''}
                     ${modifierTooltip ? `<span class="kanban-info-icon kanban-modifier-icon kanban-tooltip" title="${modifierTooltip}">🔧</span>` : ''}
-                    <button onclick="KanbanPlugin.editCard('${cardData.id}')" title="Éditer">✏️</button>
-                    <button onclick="KanbanPlugin.deleteCard('${cardData.id}')" title="Supprimer">×</button>
+                    <button onclick="window.KanbanPlugin.viewCard('${cardData.id}')" title="Consulter" class="kanban-view-btn">👁️</button>
+                    <button onclick="window.KanbanPlugin.editCard('${cardData.id}')" title="Éditer">✏️</button>
+                    <button onclick="window.KanbanPlugin.deleteCard('${cardData.id}')" title="Supprimer">×</button>
                 </div>`;
         
         // Tags en haut (avant le titre)
@@ -172,8 +173,20 @@
             html += `</div>`;
         }
         
-        // Footer avec assignee seulement
+        // Footer avec assignee et icônes de contenu
         html += `<div class="kanban-card-footer">`;
+        
+        // Liens internes (icône + nombre)
+        const internalLinksCount = (cardData.internalLinks && cardData.internalLinks.length) || 0;
+        if (internalLinksCount > 0) {
+            html += `<span class="kanban-content-indicator kanban-tooltip" title="${internalLinksCount} lien${internalLinksCount > 1 ? 's' : ''} interne${internalLinksCount > 1 ? 's' : ''}">🔗 ${internalLinksCount}</span>`;
+        }
+        
+        // Médias (préparé pour implémentation future)
+        const mediaCount = (cardData.media && cardData.media.length) || 0;
+        if (mediaCount > 0) {
+            html += `<span class="kanban-content-indicator kanban-tooltip" title="${mediaCount} média${mediaCount > 1 ? 's' : ''} lié${mediaCount > 1 ? 's' : ''}">📎 ${mediaCount}</span>`;
+        }
         
         // Assignee
         if (cardData.assignee) {
@@ -271,6 +284,38 @@
             // Save changes
             saveChanges(boardId, 'add_card');
         });
+    }
+
+    /**
+     * View card in read-only modal
+     */
+    function viewCard(cardId) {
+        const cardElement = document.getElementById(cardId);
+        const board = cardElement.closest('.kanban-board');
+        const boardId = board.id;
+        const boardData = kanbanBoards[boardId];
+        
+        // Find card in data
+        let cardData = null;
+        for (let column of boardData.columns) {
+            const found = column.cards.find(card => card.id === cardId);
+            if (found) {
+                cardData = found;
+                break;
+            }
+        }
+        
+        if (!cardData) {
+            showNotification('Carte non trouvée', 'error');
+            return;
+        }
+        
+        // Deleguer to modal module si disponible
+        if (window.KanbanModal && window.KanbanModal.showCardViewModal) {
+            window.KanbanModal.showCardViewModal(cardData);
+        } else {
+            showNotification('Module modal non disponible', 'error');
+        }
     }
 
     /**
@@ -681,6 +726,7 @@
     window.KanbanPlugin = {
         addCard,
         editCard,
+        viewCard,
         deleteCard,
         addColumn,
         deleteColumn,
