@@ -33,6 +33,9 @@
                 // Démarrer le renouvellement automatique du verrou
                 startLockRenewal(boardId);
                 
+                // Démarrer le monitoring d'inactivité
+                startInactivityMonitoring(boardId);
+                
                 return true;
             } else {
                 showNotification('Impossible d\'activer l\'édition: ' + data.error, 'error');
@@ -70,6 +73,9 @@
                 // Arrêter le renouvellement du verrou
                 stopLockRenewal(boardId);
                 
+                // Arrêter le monitoring d'inactivité
+                stopInactivityMonitoring(boardId);
+                
                 showNotification('Édition terminée', 'success');
                 updateLockUI(boardId, false, null);
                 return true;
@@ -87,6 +93,13 @@
 
     // Variables pour gérer le renouvellement des verrous
     const lockRenewalIntervals = new Map();
+    
+    // Variables pour la gestion de l'inactivité et des notifications
+    const inactivityTimers = new Map();
+    const countdownIntervals = new Map();
+    const lastActivityTimes = new Map();
+    const INACTIVITY_WARNING_TIME = 5 * 60 * 1000; // 5 minutes
+    const AUTO_UNLOCK_TIME = 15 * 60 * 1000; // 15 minutes
 
     /**
      * Start automatic lock renewal for a board
@@ -142,6 +155,195 @@
         .catch(error => {
             console.error('Lock renewal error for board ' + boardId + ':', error);
         });
+    }
+
+    /**
+     * Start inactivity monitoring for a board
+     */
+    function startInactivityMonitoring(boardId) {
+        // Mettre à jour le timestamp d'activité
+        lastActivityTimes.set(boardId, Date.now());
+        
+        // Arrêter un éventuel timer existant
+        stopInactivityMonitoring(boardId);
+        
+        // Démarrer le timer d'inactivité (5 minutes)
+        const inactivityTimer = setTimeout(() => {
+            showInactivityWarning(boardId);
+        }, INACTIVITY_WARNING_TIME);
+        
+        inactivityTimers.set(boardId, inactivityTimer);
+        
+        // Écouter les événements d'activité
+        setupActivityListeners(boardId);
+    }
+
+    /**
+     * Stop inactivity monitoring for a board
+     */
+    function stopInactivityMonitoring(boardId) {
+        // Arrêter le timer d'inactivité
+        const timer = inactivityTimers.get(boardId);
+        if (timer) {
+            clearTimeout(timer);
+            inactivityTimers.delete(boardId);
+        }
+        
+        // Arrêter le décompte s'il est actif
+        stopCountdown(boardId);
+        
+        // Supprimer les listeners d'activité
+        removeActivityListeners(boardId);
+        
+        // Nettoyer le timestamp
+        lastActivityTimes.delete(boardId);
+    }
+
+    /**
+     * Reset inactivity timer when user is active
+     */
+    function resetInactivityTimer(boardId) {
+        const currentTime = Date.now();
+        lastActivityTimes.set(boardId, currentTime);
+        
+        // Redémarrer le monitoring
+        startInactivityMonitoring(boardId);
+        
+        // Arrêter le décompte s'il est actif
+        stopCountdown(boardId);
+    }
+
+    /**
+     * Show inactivity warning and start countdown
+     */
+    function showInactivityWarning(boardId) {
+        const timeRemaining = AUTO_UNLOCK_TIME - INACTIVITY_WARNING_TIME; // 10 minutes restantes
+        let remainingSeconds = Math.floor(timeRemaining / 1000);
+        
+        // Créer la notification de décompte
+        const countdownNotification = document.createElement('div');
+        countdownNotification.id = `countdown-${boardId}`;
+        countdownNotification.className = 'kanban-countdown-notification';
+        countdownNotification.innerHTML = `
+            <div class="countdown-content">
+                <strong>⚠️ Attention</strong>
+                <p>Votre session d'édition sera automatiquement fermée dans <span class="countdown-time">${formatTime(remainingSeconds)}</span></p>
+                <button class="btn-continue-editing" onclick="KanbanLockManager.continueEditing('${boardId}')">Continuer l'édition</button>
+                <button class="btn-save-exit" onclick="KanbanLockManager.saveAndExit('${boardId}')">Sauvegarder et fermer</button>
+            </div>
+        `;
+        
+        // Ajouter au DOM
+        document.body.appendChild(countdownNotification);
+        
+        // Démarrer le décompte
+        const countdownInterval = setInterval(() => {
+            remainingSeconds--;
+            
+            if (remainingSeconds <= 0) {
+                // Temps écoulé - fermer automatiquement
+                clearInterval(countdownInterval);
+                autoCloseEditing(boardId);
+            } else {
+                // Mettre à jour l'affichage
+                const timeElement = countdownNotification.querySelector('.countdown-time');
+                if (timeElement) {
+                    timeElement.textContent = formatTime(remainingSeconds);
+                }
+            }
+        }, 1000);
+        
+        countdownIntervals.set(boardId, countdownInterval);
+    }
+
+    /**
+     * Stop countdown notification
+     */
+    function stopCountdown(boardId) {
+        // Arrêter l'intervalle
+        const interval = countdownIntervals.get(boardId);
+        if (interval) {
+            clearInterval(interval);
+            countdownIntervals.delete(boardId);
+        }
+        
+        // Supprimer la notification
+        const notification = document.getElementById(`countdown-${boardId}`);
+        if (notification) {
+            notification.remove();
+        }
+    }
+
+    /**
+     * Format time in MM:SS format
+     */
+    function formatTime(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+
+    /**
+     * Setup activity listeners for a board
+     */
+    function setupActivityListeners(boardId) {
+        const board = document.getElementById(boardId);
+        if (!board) return;
+        
+        const activityHandler = () => resetInactivityTimer(boardId);
+        
+        // Événements à surveiller
+        const events = ['click', 'keydown', 'mousemove', 'scroll'];
+        
+        events.forEach(event => {
+            board.addEventListener(event, activityHandler);
+            // Stocker les handlers pour pouvoir les supprimer
+            if (!board._activityHandlers) board._activityHandlers = [];
+            board._activityHandlers.push({event, handler: activityHandler});
+        });
+    }
+
+    /**
+     * Remove activity listeners for a board
+     */
+    function removeActivityListeners(boardId) {
+        const board = document.getElementById(boardId);
+        if (!board || !board._activityHandlers) return;
+        
+        board._activityHandlers.forEach(({event, handler}) => {
+            board.removeEventListener(event, handler);
+        });
+        
+        delete board._activityHandlers;
+    }
+
+    /**
+     * Continue editing - reset timers
+     */
+    function continueEditing(boardId) {
+        resetInactivityTimer(boardId);
+        showNotification('Session d\'édition prolongée', 'success');
+    }
+
+    /**
+     * Save and exit editing mode
+     */
+    function saveAndExit(boardId) {
+        // Sauvegarder les modifications en cours s'il y en a
+        // (à implémenter selon le système de sauvegarde du kanban)
+        
+        // Fermer le mode édition
+        unlockBoard(boardId);
+        showNotification('Modifications sauvegardées, édition fermée', 'success');
+    }
+
+    /**
+     * Auto close editing after timeout
+     */
+    function autoCloseEditing(boardId) {
+        stopCountdown(boardId);
+        unlockBoard(boardId);
+        showNotification('Session d\'édition fermée automatiquement après inactivité', 'warning');
     }
 
     /**
@@ -451,8 +653,13 @@
         disableBoardEditing,
         showLockNotification,
         hideLockNotification,
-        initializeBoardLockManagement
+        initializeBoardLockManagement,
+        continueEditing,
+        saveAndExit
     };
+
+    // Alias pour compatibilité avec les boutons HTML
+    window.KanbanLockManager = window.KanbanLockManagement;
 
     console.log('🔒 KanbanLockManagement module loaded');
 

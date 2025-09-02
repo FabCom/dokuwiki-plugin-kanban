@@ -1010,6 +1010,16 @@
     opacity: 1;
 }
 
+/* Show only view button in read-only mode on hover */
+.kanban-board.kanban-read-only .kanban-card:hover .kanban-card-actions {
+    display: flex;
+    opacity: 1;
+}
+
+.kanban-board.kanban-read-only .kanban-card-actions button:not(.kanban-view-btn) {
+    display: none;
+}
+
 .kanban-card-actions button {
     background: rgba(255, 255, 255, 0.95);
     border: 1px solid rgba(0,0,0,0.1);
@@ -1845,7 +1855,17 @@
     position: relative;
 }
 
+/* In read-only mode, hide actions by default but allow view button on hover */
 .kanban-read-only .kanban-card-actions {
+    display: none;
+}
+
+.kanban-read-only .kanban-card:hover .kanban-card-actions {
+    display: flex !important;
+    opacity: 1 !important;
+}
+
+.kanban-read-only .kanban-card-actions button:not(.kanban-view-btn) {
     display: none !important;
 }
 
@@ -1871,4 +1891,183 @@
     font-weight: 500;
     z-index: 10;
     pointer-events: none;
+}
+
+/* ===== COUNTDOWN NOTIFICATION STYLES ===== */
+
+.kanban-countdown-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    max-width: 400px;
+    animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.countdown-content {
+    padding: 16px;
+}
+
+.countdown-content strong {
+    color: #d68910;
+    font-size: 16px;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.countdown-content p {
+    margin: 8px 0 16px 0;
+    color: #6c757d;
+    line-height: 1.4;
+}
+
+.countdown-time {
+    font-weight: bold;
+    color: #dc3545;
+    font-size: 18px;
+    background: #f8d7da;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.countdown-content button {
+    margin-right: 8px;
+    margin-bottom: 0;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn-continue-editing {
+    background: #28a745;
+    color: white;
+}
+
+.btn-continue-editing:hover {
+    background: #218838;
+}
+
+.btn-save-exit {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-save-exit:hover {
+    background: #5a6268;
+}
+
+/* ========================================================================================
+   NOTIFICATIONS DE DÉCOMPTE D'INACTIVITÉ
+   ======================================================================================== */
+
+.kanban-countdown-notification {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10000;
+    background: rgba(255, 255, 255, 0.98);
+    border: 2px solid #ff6b35;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+    min-width: 400px;
+    max-width: 500px;
+    animation: slideInBounce 0.4s ease-out;
+}
+
+@keyframes slideInBounce {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -60%) scale(0.9);
+    }
+    60% {
+        transform: translate(-50%, -48%) scale(1.02);
+    }
+    100% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+.countdown-content {
+    text-align: center;
+}
+
+.countdown-content strong {
+    color: #ff6b35;
+    font-size: 18px;
+    display: block;
+    margin-bottom: 12px;
+}
+
+.countdown-content p {
+    margin: 16px 0 20px 0;
+    color: #333;
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+.countdown-time {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    font-size: 20px;
+    color: #ff6b35;
+    background: rgba(255, 107, 53, 0.1);
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 107, 53, 0.3);
+}
+
+.countdown-content button {
+    margin: 0 8px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn-continue-editing {
+    background: #28a745;
+    color: white;
+}
+
+.btn-continue-editing:hover {
+    background: #218838;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+
+.btn-save-exit {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-save-exit:hover {
+    background: #5a6268;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
 }
