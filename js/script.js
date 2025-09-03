@@ -54,28 +54,35 @@
             <div class="kanban-header">
                 <h2 class="kanban-title">${escapeHtml(boardData.title)}</h2>`;
         
-        // Add actions if editable
+        // Add actions - always show fullscreen button, conditionally show edit button
+        html += `<div class="kanban-actions">`;
+        
+        // Bouton plein écran - toujours visible
+        html += `
+            <button class="kanban-btn kanban-btn-secondary kanban-fullscreen-btn" onclick="window.KanbanPlugin.toggleFullscreen('${boardContainer.id}')" title="Affichage plein écran">
+                📏 Plein écran
+            </button>`;
+        
+        // Add edit actions if editable
         if (boardContainer.dataset.editable === 'true') {
             const isEditingMode = boardContainer.dataset.editingMode === 'true';
             
             if (isEditingMode) {
                 // Mode édition - le bouton "Réorganiser colonnes" sera ajouté par lockmanagement.js
                 html += `
-                    <div class="kanban-actions">
-                        <button class="kanban-btn kanban-lock-button" onclick="window.KanbanPlugin.lockBoard('${boardContainer.id}')" title="Terminer l'édition et déverrouiller">
-                            ✅ Terminer l'édition
-                        </button>
-                    </div>`;
+                    <button class="kanban-btn kanban-lock-button" onclick="window.KanbanPlugin.lockBoard('${boardContainer.id}')" title="Terminer l'édition et déverrouiller">
+                        ✅ Terminer l'édition
+                    </button>`;
             } else {
                 // Mode lecture - afficher le bouton d'édition
                 html += `
-                    <div class="kanban-actions">
-                        <button class="kanban-btn kanban-lock-button" onclick="window.KanbanPlugin.lockBoard('${boardContainer.id}')" title="Commencer l'édition">
-                            ✏️ Éditer
-                        </button>
-                    </div>`;
+                    <button class="kanban-btn kanban-lock-button" onclick="window.KanbanPlugin.lockBoard('${boardContainer.id}')" title="Commencer l'édition">
+                        ✏️ Éditer
+                    </button>`;
             }
         }
+        
+        html += `</div>`;
         
         html += `</div><div class="kanban-columns">`;
         
@@ -929,5 +936,65 @@
             showNotification('Erreur lors de la mise à jour', 'error');
         });
     }
+
+    /**
+     * Toggle fullscreen mode for kanban board
+     */
+    function toggleFullscreen(boardId) {
+        const board = document.getElementById(boardId);
+        if (!board) return;
+
+        const isFullscreen = board.classList.contains('kanban-fullscreen');
+        
+        if (isFullscreen) {
+            // Exit fullscreen
+            board.classList.remove('kanban-fullscreen');
+            document.body.classList.remove('kanban-fullscreen-active');
+            
+            // Update button text
+            const fullscreenBtn = board.querySelector('.kanban-fullscreen-btn');
+            if (fullscreenBtn) {
+                fullscreenBtn.innerHTML = '📏 Plein écran';
+                fullscreenBtn.title = 'Affichage plein écran';
+            }
+            
+            // Remove escape key listener
+            document.removeEventListener('keydown', handleFullscreenEscape);
+            
+        } else {
+            // Enter fullscreen
+            board.classList.add('kanban-fullscreen');
+            document.body.classList.add('kanban-fullscreen-active');
+            
+            // Update button text
+            const fullscreenBtn = board.querySelector('.kanban-fullscreen-btn');
+            if (fullscreenBtn) {
+                fullscreenBtn.innerHTML = '📐 Réduire';
+                fullscreenBtn.title = 'Quitter le plein écran';
+            }
+            
+            // Add escape key listener
+            document.addEventListener('keydown', handleFullscreenEscape);
+            
+            // Scroll to top of board
+            board.scrollIntoView({ behavior: 'smooth' });
+        }
+    }
+
+    /**
+     * Handle escape key to exit fullscreen
+     */
+    function handleFullscreenEscape(event) {
+        if (event.key === 'Escape') {
+            const fullscreenBoard = document.querySelector('.kanban-board.kanban-fullscreen');
+            if (fullscreenBoard) {
+                toggleFullscreen(fullscreenBoard.id);
+            }
+        }
+    }
+
+    // Export functions to global scope for access from HTML
+    window.KanbanPlugin = window.KanbanPlugin || {};
+    window.KanbanPlugin.toggleFullscreen = toggleFullscreen;
 
 })();

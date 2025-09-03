@@ -2219,7 +2219,7 @@
     border-radius: 12px;
     font-size: 11px;
     font-weight: 500;
-    z-index: 10;
+    z-index: 10005;
     pointer-events: none;
 }
 
@@ -3612,5 +3612,153 @@
     
     .kanban-empty-description {
         font-size: 0.9rem;
+    }
+}
+
+/* ===== FULLSCREEN MODE ===== */
+
+/* Hide other page content when kanban is in fullscreen */
+body.kanban-fullscreen-active #dokuwiki__header,
+body.kanban-fullscreen-active #dw__footer,
+body.kanban-fullscreen-active #dokuwiki__aside,
+body.kanban-fullscreen-active .dw-page-icons,
+body.kanban-fullscreen-active #dw__breadcrumbs,
+body.kanban-fullscreen-active .docInfo {
+    display: none !important;
+}
+
+/* Adjust main container */
+body.kanban-fullscreen-active main.dw-container {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+}
+
+/* Adjust content column */
+body.kanban-fullscreen-active #dokuwiki__content {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+}
+
+/* Fullscreen kanban board styles */
+.kanban-board.kanban-fullscreen {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    z-index: 10000 !important;
+    background: #f8f9fa !important;
+    border: none !important;
+    border-radius: 0 !important;
+    overflow: auto !important;
+    display: block !important;
+}
+
+/* Fullscreen kanban header adjustments */
+.kanban-board.kanban-fullscreen .kanban-header {
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    position: sticky;
+    top: 0;
+    background: #f8f9fa;
+    z-index: 10001;
+}
+
+/* Fullscreen kanban title */
+.kanban-board.kanban-fullscreen .kanban-title {
+    font-size: 1.8rem;
+}
+
+/* Fullscreen columns container */
+.kanban-board.kanban-fullscreen .kanban-columns {
+    gap: 25px;
+    padding-bottom: 20px;
+    min-height: calc(100vh - 120px);
+}
+
+/* Fullscreen columns sizing */
+.kanban-board.kanban-fullscreen .kanban-column {
+    min-width: 320px;
+    flex: 1;
+    max-width: none;
+    max-height: calc(100vh - 140px);
+}
+
+/* Fullscreen read-only indicator - higher z-index to appear above sticky actions */
+.kanban-board.kanban-fullscreen.kanban-read-only::after {
+    z-index: 10010 !important;
+}
+
+/* Fullscreen empty state adjustments */
+.kanban-board.kanban-fullscreen .kanban-empty-state {
+    padding: 80px 40px;
+    margin: 40px;
+    min-height: calc(100vh - 200px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.kanban-board.kanban-fullscreen .kanban-empty-icon {
+    font-size: 4rem;
+    margin-bottom: 30px;
+}
+
+.kanban-board.kanban-fullscreen .kanban-empty-title {
+    font-size: 2rem;
+    margin-bottom: 20px;
+}
+
+.kanban-board.kanban-fullscreen .kanban-empty-description {
+    font-size: 1.1rem;
+    max-width: 600px;
+    text-align: center;
+    line-height: 1.6;
+    margin-bottom: 30px;
+}
+
+/* Responsive adjustments for fullscreen */
+@media (max-width: 768px) {
+    .kanban-board.kanban-fullscreen {
+        padding: 15px !important;
+    }
+    
+    .kanban-board.kanban-fullscreen .kanban-columns {
+        gap: 15px;
+        flex-direction: column;
+    }
+    
+    .kanban-board.kanban-fullscreen .kanban-column {
+        min-width: auto;
+        max-height: none;
+    }
+    
+    .kanban-board.kanban-fullscreen .kanban-title {
+        font-size: 1.5rem;
+    }
+    
+    .kanban-board.kanban-fullscreen .kanban-empty-state {
+        padding: 40px 20px;
+        margin: 20px;
+    }
+    
+    .kanban-board.kanban-fullscreen .kanban-empty-icon {
+        font-size: 3rem;
+    }
+    
+    .kanban-board.kanban-fullscreen .kanban-empty-title {
+        font-size: 1.5rem;
+    }
+    
+    .kanban-board.kanban-fullscreen .kanban-empty-description {
+        font-size: 1rem;
     }
 }
