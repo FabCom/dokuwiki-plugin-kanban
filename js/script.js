@@ -1065,19 +1065,19 @@
                         <label class="kanban-filter-label">⚡ Priorité</label>
                         <div class="kanban-priorities-filter" id="priorities-filter-${boardId}">
                             <label class="kanban-filter-checkbox">
-                                <input type="checkbox" value="high">
+                                <input type="checkbox" value="high" data-filter="priority">
                                 <span class="kanban-priority-badge priority-high">🔴 Haute</span>
                             </label>
                             <label class="kanban-filter-checkbox">
-                                <input type="checkbox" value="medium">
+                                <input type="checkbox" value="medium" data-filter="priority">
                                 <span class="kanban-priority-badge priority-medium">🟡 Moyenne</span>
                             </label>
                             <label class="kanban-filter-checkbox">
-                                <input type="checkbox" value="normal">
+                                <input type="checkbox" value="normal" data-filter="priority">
                                 <span class="kanban-priority-badge priority-normal">🟢 Normale</span>
                             </label>
                             <label class="kanban-filter-checkbox">
-                                <input type="checkbox" value="low">
+                                <input type="checkbox" value="low" data-filter="priority">
                                 <span class="kanban-priority-badge priority-low">🔵 Basse</span>
                             </label>
                         </div>
@@ -1093,7 +1093,7 @@
                     <div class="kanban-filter-group">
                         <label class="kanban-filter-label">📅 Échéance</label>
                         <div class="kanban-date-filter">
-                            <select class="kanban-date-range-select" id="date-filter-${boardId}">
+                            <select class="kanban-date-range-select" id="date-filter-${boardId}" data-filter="dateRange">
                                 <option value="">Toutes les dates</option>
                                 <option value="overdue">En retard</option>
                                 <option value="today">Aujourd'hui</option>
