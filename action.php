@@ -10,8 +10,18 @@ use dokuwiki\Extension\ActionPlugin;
 use dokuwiki\Extension\EventHandler;
 use dokuwiki\Extension\Event;
 
+// Include our security-enhanced lock manager
+require_once __DIR__ . '/KanbanLockManager.php';
+
 class action_plugin_kanban extends ActionPlugin
 {
+    private $lockManager;
+    
+    public function __construct()
+    {
+        // Initialize secure lock manager
+        $this->lockManager = new KanbanLockManager();
+    }
     /**
      * Registers a callback function for a given event
      *
@@ -734,11 +744,11 @@ class action_plugin_kanban extends ActionPlugin
     }
 
     /**
-     * Lock a kanban board for editing
+     * Lock a kanban board for editing - SECURITY ENHANCED
      */
     private function lockBoard()
     {
-        global $INPUT, $INFO, $ID, $USERINFO;
+        global $INPUT;
         
         // SECURITY: Validate authentication for lock operations
         if (!$this->validateAuthentication()) {
@@ -767,193 +777,123 @@ class action_plugin_kanban extends ActionPlugin
             return;
         }
         
-        // Sauvegarder l'ID actuel et utiliser l'ID de la page kanban
-        $originalID = $ID;
-        $ID = $pageId;
-        
-        // Vérifier les permissions d'écriture
-        $pageInfo = pageinfo();
-        if (!$pageInfo['writable']) {
-            $ID = $originalID; // Restaurer l'ID original
+        // SECURITY: Check write permissions first
+        if (!auth_quickaclcheck($pageId) >= AUTH_EDIT) {
+            error_log("Kanban SECURITY: Lock denied - insufficient permissions for page: $pageId");
             http_response_code(403);
-            echo json_encode(['error' => 'Permission d\'écriture refusée']);
+            echo json_encode(['error' => 'Permissions insuffisantes pour éditer cette page']);
             return;
         }
         
-        // Vérifier si déjà verrouillé
-        $lockedBy = checklock($pageId);
-        if ($lockedBy) {
-            $ID = $originalID; // Restaurer l'ID original
+        // Use atomic lock manager
+        $result = $this->lockManager->acquireLock($pageId, $currentUser);
+        
+        if ($result['success']) {
+            echo json_encode([
+                'success' => true,
+                'message' => 'Board verrouillé pour édition',
+                'locked' => true,
+                'locked_by' => $currentUser,
+                'lock_type' => $result['lock_type'] ?? 'atomic',
+                'expires_at' => $result['expires_at'] ?? null
+            ]);
+        } else {
             http_response_code(409);
             echo json_encode([
-                'error' => 'Page déjà verrouillée',
-                'locked_by' => $lockedBy,
+                'error' => $result['error'],
                 'locked' => true
             ]);
-            return;
         }
-        
-        // Verrouiller la page
-        lock($pageId);
-        
-        // Vérifier immédiatement si le verrouillage a fonctionné
-        $lockedBy = checklock($pageId);
-        
-        // Debug logging
-        error_log("Kanban Debug - lockBoard: pageId=$pageId, après lock() lockedBy=" . var_export($lockedBy, true));
-        
-        // Si le verrouillage natif ne fonctionne pas, utiliser une approche alternative
-        if (!$lockedBy) {
-            // Récupérer le nom d'utilisateur de plusieurs sources possibles
-            global $conf;
-            $currentUser = 'Utilisateur'; // Fallback par défaut
-            
-            // Source 1: Variable globale DokuWiki
-            if (!empty($_SERVER['REMOTE_USER'])) {
-                $currentUser = $_SERVER['REMOTE_USER'];
-            }
-            // Source 2: INFO structure
-            elseif (!empty($INFO['client'])) {
-                $currentUser = $INFO['client'];
-            }
-            // Source 3: Userinfo name
-            elseif (!empty($INFO['userinfo']['name'])) {
-                $currentUser = $INFO['userinfo']['name'];
-            }
-            // Source 4: Userinfo mail comme fallback
-            elseif (!empty($INFO['userinfo']['mail'])) {
-                $currentUser = $INFO['userinfo']['mail'];
-            }
-            
-            error_log("Kanban Debug - lockBoard: Utilisateur détecté = '$currentUser' (sources: REMOTE_USER='" . ($_SERVER['REMOTE_USER'] ?? 'vide') . "', client='" . ($INFO['client'] ?? 'vide') . "', name='" . ($INFO['userinfo']['name'] ?? 'vide') . "')");
-            
-            // Créer notre propre fichier de verrouillage avec timestamp
-            $lockDir = DOKU_INC . 'data/locks/';
-            if (!is_dir($lockDir)) {
-                mkdir($lockDir, 0755, true);
-            }
-            $lockFile = $lockDir . str_replace(':', '_', $pageId) . '.kanban.lock';
-            
-            // Stocker utilisateur et timestamp (format: "utilisateur|timestamp")
-            $lockData = $currentUser . '|' . time();
-            file_put_contents($lockFile, $lockData);
-            
-            $lockedBy = $currentUser;
-            error_log("Kanban Debug - lockBoard: Verrou créé pour '$currentUser' dans $lockFile avec timestamp");
-        }
-        
-        // Restaurer l'ID original
-        $ID = $originalID;
-        
-        echo json_encode([
-            'success' => true,
-            'message' => 'Board verrouillé pour édition',
-            'locked' => true,
-            'locked_by' => $lockedBy
-        ]);
     }
 
     /**
-     * Unlock a kanban board
+     * Unlock a kanban board - SECURITY ENHANCED
      */
     private function unlockBoard()
     {
         global $INPUT;
         
-        $pageId = $INPUT->str('page_id');
-        if (empty($pageId)) {
-            http_response_code(400);
-            echo json_encode(['error' => 'ID de page manquant']);
+        // SECURITY: Validate authentication for unlock operations
+        if (!$this->validateAuthentication()) {
+            error_log("Kanban SECURITY: Unlock operation denied - authentication failed");
+            http_response_code(401);
+            echo json_encode(['error' => 'Authentication required']);
             return;
         }
         
-        // Déverrouiller la page
-        $unlocked = unlock($pageId);
+        $pageId = $INPUT->str('page_id');
         
-        // Supprimer aussi notre fichier backup si il existe
-        $lockFile = DOKU_INC . 'data/locks/' . str_replace(':', '_', $pageId) . '.kanban.lock';
-        if (file_exists($lockFile)) {
-            unlink($lockFile);
+        // SECURITY: Validate page ID
+        if (empty($pageId) || !preg_match('/^[a-zA-Z0-9:_-]+$/', $pageId)) {
+            error_log("Kanban SECURITY: Invalid page ID for unlock: $pageId");
+            http_response_code(400);
+            echo json_encode(['error' => 'ID de page manquant ou invalide']);
+            return;
         }
         
-        echo json_encode([
-            'success' => true,
-            'message' => $unlocked ? 'Board déverrouillé' : 'Aucun verrou à supprimer',
-            'locked' => false,
-            'unlocked' => $unlocked
-        ]);
+        // Get authenticated user
+        $currentUser = $this->getCurrentUser();
+        if (!$currentUser) {
+            error_log("Kanban SECURITY: Unlock denied - no valid user");
+            http_response_code(401);
+            echo json_encode(['error' => 'Utilisateur non authentifié']);
+            return;
+        }
+        
+        // Use atomic lock manager for unlock
+        $result = $this->lockManager->releaseLock($pageId, $currentUser);
+        
+        if ($result['success']) {
+            echo json_encode([
+                'success' => true,
+                'message' => 'Board déverrouillé avec succès',
+                'locked' => false,
+                'unlocked' => true,
+                'released_by' => $currentUser
+            ]);
+        } else {
+            // Still return success for missing locks (idempotent operation)
+            echo json_encode([
+                'success' => true,
+                'message' => $result['error'] ?? 'Aucun verrou à supprimer',
+                'locked' => false,
+                'unlocked' => false
+            ]);
+        }
     }
 
     /**
-     * Check if a kanban board is locked
+     * Check if a kanban board is locked - SECURITY ENHANCED
      */
     private function checkBoardLock()
     {
-        global $INPUT, $INFO;
+        global $INPUT;
         
         $pageId = $INPUT->str('page_id');
-        if (empty($pageId)) {
+        
+        // SECURITY: Validate page ID
+        if (empty($pageId) || !preg_match('/^[a-zA-Z0-9:_-]+$/', $pageId)) {
+            error_log("Kanban SECURITY: Invalid page ID for lock check: $pageId");
             http_response_code(400);
-            echo json_encode(['error' => 'ID de page manquant']);
+            echo json_encode(['error' => 'ID de page manquant ou invalide']);
             return;
         }
         
-        $lockedBy = checklock($pageId);
+        // Get authenticated user - no auth required for reading lock status
+        $currentUser = $this->getCurrentUser();
         
-        // Si le verrouillage DokuWiki ne retourne rien, vérifier notre fichier backup
-        if (!$lockedBy) {
-            $lockFile = DOKU_INC . 'data/locks/' . str_replace(':', '_', $pageId) . '.kanban.lock';
-            if (file_exists($lockFile)) {
-                $lockContent = file_get_contents($lockFile);
-                
-                // Vérifier si le format inclut un timestamp
-                if (strpos($lockContent, '|') !== false) {
-                    list($lockUser, $lockTime) = explode('|', $lockContent, 2);
-                    
-                    // Vérifier l'expiration (15 minutes = 900 secondes, comme DokuWiki)
-                    global $conf;
-                    $locktime = isset($conf['locktime']) ? $conf['locktime'] : 900;
-                    
-                    if (time() - $lockTime > $locktime) {
-                        // Verrou expiré, le supprimer
-                        unlink($lockFile);
-                        error_log("Kanban Debug - checkBoardLock: Verrou expiré pour '$lockUser', supprimé");
-                        $lockedBy = null;
-                    } else {
-                        $lockedBy = $lockUser;
-                    }
-                } else {
-                    // Ancien format sans timestamp, considérer comme expiré
-                    unlink($lockFile);
-                    error_log("Kanban Debug - checkBoardLock: Ancien verrou sans timestamp supprimé");
-                    $lockedBy = null;
-                }
-            }
-        }
+        // Use atomic lock manager for lock checking
+        $lockInfo = $this->lockManager->getLockInfo($pageId);
         
-        // Récupérer l'utilisateur actuel avec la même logique que lockBoard
-        $currentUser = 'Utilisateur'; // Fallback par défaut
-        
-        if (!empty($_SERVER['REMOTE_USER'])) {
-            $currentUser = $_SERVER['REMOTE_USER'];
-        } elseif (!empty($INFO['client'])) {
-            $currentUser = $INFO['client'];
-        } elseif (!empty($INFO['userinfo']['name'])) {
-            $currentUser = $INFO['userinfo']['name'];
-        } elseif (!empty($INFO['userinfo']['mail'])) {
-            $currentUser = $INFO['userinfo']['mail'];
-        }
-        
-        // Si la page est verrouillée par l'utilisateur actuel, considérer comme "pas verrouillée" côté client
-        $isLockedByOther = $lockedBy && ($lockedBy !== $currentUser);
-        
-        // Debug logging
-        error_log("Kanban Debug - checkBoardLock: pageId=$pageId, lockedBy=" . var_export($lockedBy, true) . ", currentUser=" . var_export($currentUser, true) . ", isLockedByOther=" . var_export($isLockedByOther, true));
+        // If locked by someone else, return lock information
+        $isLockedByOther = $lockInfo['locked'] && $lockInfo['locked_by'] !== $currentUser;
         
         echo json_encode([
             'locked' => $isLockedByOther,
-            'locked_by' => $isLockedByOther ? $lockedBy : null,
-            'page_id' => $pageId
+            'locked_by' => $isLockedByOther ? $lockInfo['locked_by'] : null,
+            'page_id' => $pageId,
+            'lock_type' => $lockInfo['lock_type'] ?? null,
+            'expires_at' => $lockInfo['expires_at'] ?? null
         ]);
     }
 
