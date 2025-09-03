@@ -197,26 +197,31 @@ class syntax_plugin_kanban extends SyntaxPlugin
         // Container pour les données JSON (lu par JavaScript)
         $renderer->doc .= '<script type="application/json" class="kanban-data">' . $jsonData . '</script>';
         
-        // Ajouter les informations utilisateur pour le système de verrouillage
-        // Utiliser la même logique que dans action.php
-        $currentUser = 'Utilisateur';
+        // SECURITY: Load security policy manager
+        require_once(dirname(__FILE__) . '/KanbanAuthManager.php');
+        require_once(dirname(__FILE__) . '/KanbanSecurityPolicy.php');
         
-        if (!empty($INFO['userinfo']['name'])) {
-            $currentUser = $INFO['userinfo']['name'];
-        } elseif (!empty($INFO['userinfo']['mail'])) {
-            $currentUser = $INFO['userinfo']['mail'];
+        // SECURITY: Safely get and validate current user
+        $currentUser = KanbanAuthManager::getCurrentUser();
+        $currentUser = KanbanSecurityPolicy::sanitizeForJS($currentUser ?: 'Anonymous', 'username');
+        
+        // SECURITY: Validate page ID  
+        $pageId = $INFO['id'] ?? '';
+        $pageId = KanbanSecurityPolicy::sanitizeForJS($pageId, 'pageid');
+        
+        // SECURITY: Detect potential XSS in user data
+        if (KanbanSecurityPolicy::detectXSSPatterns($currentUser . $pageId)) {
+            error_log("Kanban SECURITY: XSS attempt blocked in syntax.php");
+            $currentUser = 'Anonymous';
+            $pageId = '';
         }
         
-        $pageId = $INFO['id'] ?? '';
+        // SECURITY: Generate JavaScript with safe injection and nonce
+        $jsCode = 'if (typeof JSINFO === "undefined") JSINFO = {};' .
+                  'JSINFO.kanban_user = ' . KanbanSecurityPolicy::safeJsonEncode($currentUser) . ';' .
+                  'JSINFO.kanban_page_id = ' . KanbanSecurityPolicy::safeJsonEncode($pageId) . ';';
         
-        // Debug logging pour comprendre la structure de $INFO
-        error_log("Kanban Debug - syntax.php: currentUser=" . var_export($currentUser, true) . ", INFO structure=" . print_r($INFO, true));
-        
-        $renderer->doc .= '<script type="text/javascript">';
-        $renderer->doc .= 'if (typeof JSINFO === "undefined") JSINFO = {};';
-        $renderer->doc .= 'JSINFO.kanban_user = ' . json_encode($currentUser) . ';';
-        $renderer->doc .= 'JSINFO.kanban_page_id = ' . json_encode($pageId) . ';';
-        $renderer->doc .= '</script>';
+        $renderer->doc .= KanbanSecurityPolicy::inlineScript($jsCode, 'kanban-config');
         
         // Container vide pour le contenu généré par JavaScript
         $renderer->doc .= '<div class="kanban-content-container" data-loading="true">';

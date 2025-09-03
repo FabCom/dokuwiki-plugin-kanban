@@ -17,9 +17,14 @@ class action_plugin_kanban extends ActionPlugin
 {
     private $lockManager;
     
-    public function __construct()
+    function __construct()
     {
-        // Initialize secure lock manager
+        // Load security components
+        require_once(dirname(__FILE__) . '/KanbanLockManager.php');
+        require_once(dirname(__FILE__) . '/KanbanAuthManager.php');
+        require_once(dirname(__FILE__) . '/KanbanSecurityPolicy.php');
+        
+        // Initialize lock manager
         $this->lockManager = new KanbanLockManager();
     }
     /**
@@ -32,6 +37,7 @@ class action_plugin_kanban extends ActionPlugin
     {
         $controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, 'addAssets');
         $controller->register_hook('AJAX_CALL_UNKNOWN', 'BEFORE', $this, 'handleAjax');
+        $controller->register_hook('DOKUWIKI_STARTED', 'AFTER', $this, 'setSecurityHeaders');
         // Ajouter user info AVANT TPL_METAHEADER_OUTPUT
         $controller->register_hook('DOKUWIKI_STARTED', 'AFTER', $this, 'addUserInfoToJSINFO');
     }
@@ -97,11 +103,13 @@ class action_plugin_kanban extends ActionPlugin
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/discussions.js'
         ];
         
+                
         $event->data['script'][] = [
             'type' => 'text/javascript',
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-main.js'
         ];
         
+        // Core functionality scripts
         $event->data['script'][] = [
             'type' => 'text/javascript',
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/lockmanagement.js'
@@ -117,12 +125,32 @@ class action_plugin_kanban extends ActionPlugin
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/filters.js'
         ];
         
+        // Main script - must be loaded last
         $event->data['script'][] = [
             'type' => 'text/javascript',
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/script.js'
         ];
-        
-        // User info est ajouté via DOKUWIKI_STARTED hook
+    }
+
+    /**
+     * Set Content Security Policy and other security headers
+     */
+    public function setSecurityHeaders(Event $event, $param) {
+        // Only apply CSP if Kanban is being used on this page
+        if (strpos($_SERVER['REQUEST_URI'], 'kanban') !== false || 
+            (isset($_GET['id']) && preg_match('/kanban/', $_GET['id']))) {
+            
+            // Check if headers haven't been sent yet
+            if (!headers_sent()) {
+                // Set CSP headers using security policy
+                KanbanSecurityPolicy::setCSPHeader(false); // false = relaxed for DokuWiki compatibility
+                
+                // Additional security headers
+                header('X-Content-Type-Options: nosniff');
+                header('X-Frame-Options: SAMEORIGIN');
+                header('Referrer-Policy: strict-origin-when-cross-origin');
+            }
+        }
     }
     
     /**
@@ -318,72 +346,21 @@ class action_plugin_kanban extends ActionPlugin
     }
 
     /**
-     * Strict authentication validation for write operations
-     * Returns true only if user is properly authenticated
+     * Validate user authentication - SECURITY ENHANCED
+     * Uses centralized auth manager
      */
     private function validateAuthentication()
     {
-        global $INFO, $conf;
-        
-        // If ACL is disabled, allow operations
-        if (!$conf['useacl']) {
-            return true;
-        }
-        
-        // Check for valid authenticated user
-        $isAuthenticated = (
-            !empty($INFO['client']) ||
-            !empty($_SERVER['REMOTE_USER']) ||
-            !empty($_SERVER['PHP_AUTH_USER'])
-        );
-        
-        if (!$isAuthenticated) {
-            error_log("Kanban SECURITY: Write operation denied - no authenticated user. IP: " . 
-                     ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
-            return false;
-        }
-        
-        return true;
+        return KanbanAuthManager::isAuthenticated();
     }
 
     /**
-     * Get current authenticated user with security validation
-     * Returns null if no valid authentication found
+     * Get current authenticated user - SECURITY ENHANCED
+     * Uses centralized auth manager
      */
     private function getCurrentUser()
     {
-        global $INFO, $conf;
-        
-        // Primary: DokuWiki user info
-        if (!empty($INFO['client'])) {
-            return $INFO['client'];
-        }
-        
-        // Fallback: Server authentication
-        if (!empty($_SERVER['REMOTE_USER'])) {
-            return $_SERVER['REMOTE_USER'];
-        }
-        
-        if (!empty($_SERVER['PHP_AUTH_USER'])) {
-            return $_SERVER['PHP_AUTH_USER'];
-        }
-        
-        // SECURITY: Development fallback ONLY if explicitly enabled
-        if (isset($conf['plugin']['kanban']['enable_fallback_auth']) && 
-            $conf['plugin']['kanban']['enable_fallback_auth']) {
-            
-            $isLocalhost = (
-                strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false ||
-                $_SERVER['SERVER_ADDR'] === '127.0.0.1'
-            );
-            
-            if ($isLocalhost && defined('KANBAN_DEV_USER')) {
-                error_log("Kanban SECURITY: Development user used: " . KANBAN_DEV_USER);
-                return KANBAN_DEV_USER;
-            }
-        }
-        
-        return null;
+        return KanbanAuthManager::getCurrentUser();
     }
     /**
      * Save kanban board data
@@ -434,11 +411,11 @@ class action_plugin_kanban extends ActionPlugin
         // Debug: Log des données décodées
         error_log("Kanban Debug - Données reçues et décodées: " . print_r($data, true));
         
-        // Check permissions
-        if (!auth_quickaclcheck($pageId) >= AUTH_EDIT) {
-            error_log("Kanban Plugin: Insufficient permissions for page: $pageId");
+        // SECURITY: Check permissions using centralized auth manager
+        if (!KanbanAuthManager::canEdit($pageId)) {
+            error_log("Kanban SECURITY: Save denied - insufficient edit permissions for page: $pageId");
             http_response_code(403);
-            echo json_encode(['error' => 'Permissions insuffisantes']);
+            echo json_encode(['error' => 'Permissions insuffisantes pour éditer cette page']);
             return;
         }
         
@@ -777,9 +754,9 @@ class action_plugin_kanban extends ActionPlugin
             return;
         }
         
-        // SECURITY: Check write permissions first
-        if (!auth_quickaclcheck($pageId) >= AUTH_EDIT) {
-            error_log("Kanban SECURITY: Lock denied - insufficient permissions for page: $pageId");
+        // SECURITY: Check write permissions using centralized auth manager
+        if (!KanbanAuthManager::canEdit($pageId)) {
+            error_log("Kanban SECURITY: Lock denied - insufficient edit permissions for page: $pageId");
             http_response_code(403);
             echo json_encode(['error' => 'Permissions insuffisantes pour éditer cette page']);
             return;

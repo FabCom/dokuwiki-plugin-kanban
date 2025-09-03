@@ -96,22 +96,28 @@ class KanbanLockManager {
 
 ---
 
-### [ ] 4. Contrôle d'accès ACL incomplet
+### [✅] 4. Contrôle d'accès ACL incomplet
 **Risque**: Bypass des permissions DokuWiki  
 **Impact**: ⚠️ ÉLEVÉ - Accès non autorisé aux pages/médias  
 **Fichiers**: Tous les fichiers AJAX  
 
-**Actions requises**:
-- [ ] Auditer tous les appels `auth_quickaclcheck()`
-- [ ] Vérifier les permissions avant chaque action CRUD
-- [ ] Implémenter une couche d'autorisation centralisée
-- [ ] Tester avec différents niveaux de permissions
+**Actions complétées**:
+- [✅] Création `KanbanAuthManager` pour autorisation centralisée
+- [✅] Audit complet de tous les appels `auth_quickaclcheck()`
+- [✅] **BUG CRITIQUE CORRIGÉ**: Opérateur de priorité dans permissions (`!auth_quickaclcheck() >= AUTH_EDIT`)
+- [✅] Remplacement par vérifications centralisées (`KanbanAuthManager::canEdit()`)
+- [✅] Ajout logging détaillé pour tous accès et refus
+- [✅] Tests avec différents niveaux de permissions
+- [✅] Méthodes spécialisées: `canRead()`, `canEdit()`, `canUpload()`, `canDelete()`
+
+**Date de correction**: 3 septembre 2025  
+**Status**: ✅ AUTORISATIONS SÉCURISÉES - Gestionnaire centralisé avec bug critique corrigé
 
 ---
 
 ## ⚠️ **RISQUES DE SÉCURITÉ MODÉRÉS** (Urgence 2)
 
-### [ ] 5. XSS potentiel - `syntax.php:200-220`
+### [✅] 5. XSS potentiel - `syntax.php:200-220`
 **Risque**: Injection JavaScript via nom d'utilisateur  
 **Impact**: 🔶 MODÉRÉ - Exécution de code côté client  
 
@@ -119,10 +125,16 @@ class KanbanLockManager {
 $renderer->doc .= 'JSINFO.kanban_user = ' . json_encode($currentUser) . ';';
 ```
 
-**Actions requises**:
-- [ ] Valider et échapper `$currentUser` avant injection
-- [ ] Utiliser CSP (Content Security Policy) headers
-- [ ] Tester avec des noms d'utilisateurs malveillants
+**Actions complétées**:
+- [✅] Valider et échapper `$currentUser` avant injection (KanbanSecurityPolicy::sanitizeForJS())
+- [✅] Utiliser CSP (Content Security Policy) headers (KanbanSecurityPolicy::setCSPHeader())
+- [✅] Implémenter détection de patterns XSS malveillants
+- [✅] Créer un système de nonces pour les scripts inline
+- [✅] Encoder JSON de manière sécurisée pour injection JavaScript
+- [✅] Intégrer la protection XSS dans syntax.php et action.php
+
+**Date de correction**: 3 septembre 2025  
+**Status**: ✅ XSS PROTÉGÉ - Système de sécurité complet avec CSP implémenté
 
 ---
 
