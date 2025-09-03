@@ -20,6 +20,7 @@ class KanbanFilters {
     }
 
     init() {
+        this.toggleInProgress = false; // Flag to prevent double events
         this.createFilterUI();
         this.bindEvents();
         this.extractOriginalData();
@@ -93,6 +94,7 @@ class KanbanFilters {
      * Bind event listeners
      */
     bindEvents() {
+        console.log('Binding events for kanban:', this.kanbanId); // Debug log
         const searchInput = document.getElementById(`search-${this.kanbanId}`);
         const filtersToggle = document.getElementById(`toggle-filters-${this.kanbanId}`);
         const clearFilters = document.getElementById(`clear-filters-${this.kanbanId}`);
@@ -119,19 +121,47 @@ class KanbanFilters {
 
         // Filters toggle
         if (filtersToggle) {
-            filtersToggle.addEventListener('click', () => {
-                const isVisible = advancedFilters.style.display !== 'none';
-                advancedFilters.style.display = isVisible ? 'none' : 'block';
+            // Remove any existing listeners to prevent double binding
+            const newToggleButton = filtersToggle.cloneNode(true);
+            filtersToggle.parentNode.replaceChild(newToggleButton, filtersToggle);
+            
+            newToggleButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Prevent double events
+                if (this.toggleInProgress) {
+                    console.log('Toggle already in progress, ignoring click');
+                    return;
+                }
+                
+                this.toggleInProgress = true;
+                console.log('Toggle button clicked!'); // Debug log
+                
+                const isVisible = advancedFilters.classList.contains('active');
+                
+                if (isVisible) {
+                    advancedFilters.classList.remove('active');
+                } else {
+                    advancedFilters.classList.add('active');
+                    this.populateFilterOptions();
+                }
                 
                 // Update text and icon
-                const textSpan = filtersToggle.querySelector('.toggle-text');
-                const iconSpan = filtersToggle.querySelector('.toggle-icon');
+                const textSpan = newToggleButton.querySelector('.toggle-text');
+                const iconSpan = newToggleButton.querySelector('.toggle-icon');
                 if (textSpan) textSpan.textContent = isVisible ? '📋 Filtres' : '📋 Masquer';
                 if (iconSpan) iconSpan.textContent = isVisible ? '▼' : '▲';
                 
-                if (!isVisible) {
-                    this.populateFilterOptions();
-                }
+                console.log('Filters panel visibility:', !isVisible); // Debug log
+                console.log('Advanced filters element:', advancedFilters); // Debug log
+                console.log('Advanced filters classes:', advancedFilters.className); // Debug log
+                console.log('Advanced filters computed display:', window.getComputedStyle(advancedFilters).display); // Debug log
+                
+                // Reset flag after a short delay
+                setTimeout(() => {
+                    this.toggleInProgress = false;
+                }, 100);
             });
         } else {
             console.warn('Filters toggle button not found:', `toggle-filters-${this.kanbanId}`);

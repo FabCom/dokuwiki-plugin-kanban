@@ -746,6 +746,13 @@
         // Initialize filters system with delay to ensure DOM is ready
         if (window.KanbanFilters) {
             const boardId = board.id;
+            
+            // Check if filters instance already exists to avoid double initialization
+            if (window.kanbanFiltersInstances && window.kanbanFiltersInstances[boardId]) {
+                console.log('Filters already initialized for:', boardId);
+                return;
+            }
+            
             setTimeout(() => {
                 const filtersInstance = new window.KanbanFilters(boardId);
                 filtersInstance.initialize();
@@ -1045,8 +1052,7 @@
                 
                 <!-- Panneau de filtres avancés (masqué par défaut) -->
                 <div class="kanban-advanced-filters" 
-                     id="advanced-filters-${boardId}" 
-                     style="display: none;">
+                     id="advanced-filters-${boardId}">
                      
                     <div class="kanban-filter-group">
                         <label class="kanban-filter-label">🏷️ Tags</label>
