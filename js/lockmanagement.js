@@ -467,11 +467,6 @@
             btn.style.pointerEvents = 'none';
         });
         
-        // Hide "Ajouter Colonne" button
-        board.querySelectorAll('button[onclick*="addColumn"]').forEach(btn => {
-            btn.style.display = 'none';
-        });
-        
         // Remove column reorder button if present
         const reorderButton = board.querySelector('.kanban-reorder-button');
         if (reorderButton) {
@@ -515,11 +510,6 @@
             btn.disabled = false;
             btn.style.opacity = '1';
             btn.style.pointerEvents = 'auto';
-        });
-        
-        // Show "Ajouter Colonne" button
-        board.querySelectorAll('button[onclick*="addColumn"]').forEach(btn => {
-            btn.style.display = 'inline-block';
         });
         
         // Add column reorder button if not present

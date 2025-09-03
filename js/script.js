@@ -56,15 +56,25 @@
         
         // Add actions if editable
         if (boardContainer.dataset.editable === 'true') {
-            html += `
-                <div class="kanban-actions">
-                    <button class="kanban-btn kanban-lock-button" onclick="window.KanbanPlugin.lockBoard('${boardContainer.id}')" title="Commencer l'édition">
-                        ✏️ Éditer
-                    </button>
-                    <button class="kanban-btn kanban-btn-primary" onclick="window.KanbanPlugin.addColumn('${boardContainer.id}')">
-                        Ajouter Colonne
-                    </button>
-                </div>`;
+            const isEditingMode = boardContainer.dataset.editingMode === 'true';
+            
+            if (isEditingMode) {
+                // Mode édition - le bouton "Réorganiser colonnes" sera ajouté par lockmanagement.js
+                html += `
+                    <div class="kanban-actions">
+                        <button class="kanban-btn kanban-lock-button" onclick="window.KanbanPlugin.lockBoard('${boardContainer.id}')" title="Terminer l'édition et déverrouiller">
+                            ✅ Terminer l'édition
+                        </button>
+                    </div>`;
+            } else {
+                // Mode lecture - afficher le bouton d'édition
+                html += `
+                    <div class="kanban-actions">
+                        <button class="kanban-btn kanban-lock-button" onclick="window.KanbanPlugin.lockBoard('${boardContainer.id}')" title="Commencer l'édition">
+                            ✏️ Éditer
+                        </button>
+                    </div>`;
+            }
         }
         
         html += `</div><div class="kanban-columns">`;
@@ -79,9 +89,9 @@
                         <h3 class="kanban-empty-title">Tableau kanban vide</h3>
                         <p class="kanban-empty-description">
                             Ce tableau kanban ne contient encore aucune colonne.<br>
-                            Cliquez sur <strong>"Ajouter Colonne"</strong> pour commencer à organiser vos tâches.
+                            Cliquez sur <strong>"Gérer les colonnes"</strong> pour commencer à organiser vos tâches.
                         </p>
-                        <button class="kanban-btn kanban-btn-primary kanban-btn-large" onclick="window.KanbanPlugin.addColumn('${boardContainer.id}')">
+                        <button class="kanban-btn kanban-btn-primary kanban-btn-large" onclick="window.showColumnOrderModal && window.showColumnOrderModal('${boardContainer.id}')">
                             ➕ Créer ma première colonne
                         </button>
                     </div>
@@ -466,9 +476,9 @@
         }
         
         if (window.KanbanModalColumns && window.KanbanModalColumns.showColumnOrderModal) {
-            window.KanbanModalColumns.showColumnOrderModal(boardData, function(newOrder, updatedTitles, deletedColumns) {
-                // Apply new order, updated titles, and deletions
-                reorderColumns(boardId, newOrder, updatedTitles, deletedColumns);
+            window.KanbanModalColumns.showColumnOrderModal(boardData, function(newOrder, updatedTitles, deletedColumns, addedColumns) {
+                // Apply new order, updated titles, deletions, and additions
+                reorderColumns(boardId, newOrder, updatedTitles, deletedColumns, addedColumns);
             });
         } else {
             showNotification('Module modal colonnes non disponible', 'error');
@@ -476,51 +486,53 @@
     }
 
     /**
-     * Reorder columns based on new order array, update titles, and handle deletions
+     * Reorder columns based on new order array, update titles, handle deletions and additions
      */
-    function reorderColumns(boardId, newOrder, updatedTitles, deletedColumns) {
+    function reorderColumns(boardId, newOrder, updatedTitles, deletedColumns, addedColumns) {
         const board = document.getElementById(boardId);
         const boardData = kanbanBoards[boardId];
         
-        // Update column titles first
-        if (updatedTitles) {
-            Object.keys(updatedTitles).forEach(columnIndex => {
-                const index = parseInt(columnIndex);
-                if (boardData.columns[index]) {
-                    boardData.columns[index].title = updatedTitles[columnIndex];
+        // Create a new columns array that will replace the current one
+        const newColumns = [];
+        
+        // First, process existing columns according to newOrder (excluding deleted ones)
+        if (newOrder && newOrder.length > 0) {
+            newOrder.forEach(originalIndex => {
+                // Skip if this column is marked for deletion
+                if (deletedColumns && deletedColumns.includes(originalIndex)) {
+                    return;
+                }
+                
+                if (boardData.columns[originalIndex]) {
+                    const column = { ...boardData.columns[originalIndex] };
+                    
+                    // Apply title update if any
+                    if (updatedTitles && updatedTitles[originalIndex]) {
+                        column.title = updatedTitles[originalIndex];
+                    }
+                    
+                    newColumns.push(column);
                 }
             });
         }
         
-        // Remove deleted columns (sort indices in reverse order to avoid index shifting)
-        if (deletedColumns && deletedColumns.length > 0) {
-            deletedColumns.sort((a, b) => b - a).forEach(columnIndex => {
-                if (boardData.columns[columnIndex]) {
-                    const deletedColumn = boardData.columns[columnIndex];
-                    console.log('Deleting column:', deletedColumn.title);
-                    boardData.columns.splice(columnIndex, 1);
-                }
+        // Add new columns at the end
+        if (addedColumns && addedColumns.length > 0) {
+            addedColumns.forEach(newColumn => {
+                newColumns.push(newColumn);
             });
-            
-            // Adjust newOrder indices after deletions
-            const adjustedOrder = newOrder.filter(originalIndex => {
-                return !deletedColumns.includes(originalIndex);
-            }).map(originalIndex => {
-                // Count how many deleted indices are before this one
-                const deletionsBefore = deletedColumns.filter(deletedIndex => deletedIndex < originalIndex).length;
-                return originalIndex - deletionsBefore;
-            });
-            
-            // Reorder remaining columns
-            if (adjustedOrder.length > 0) {
-                const reorderedColumns = adjustedOrder.map(index => boardData.columns[index]);
-                boardData.columns = reorderedColumns;
-            }
-        } else {
-            // Reorder data (no deletions)
-            const reorderedColumns = newOrder.map(index => boardData.columns[index]);
-            boardData.columns = reorderedColumns;
         }
+        
+        // Replace the columns array
+        boardData.columns = newColumns;
+        
+        console.log('Reorder complete:', {
+            originalCount: boardData.columns.length,
+            newOrder: newOrder,
+            deletedColumns: deletedColumns,
+            addedColumns: addedColumns,
+            finalCount: newColumns.length
+        });
         
         // Re-render the board
         renderBoard(board, boardData);
@@ -533,7 +545,7 @@
         }
         // Save changes
         saveChanges(boardId, 'manage_columns');
-        showNotification('Colonnes réorganisées avec succès', 'success');
+        showNotification('Colonnes mises à jour avec succès', 'success');
     }
     function addColumn(boardId) {
         const board = document.getElementById(boardId);
@@ -541,21 +553,38 @@
         
         const columnTitle = prompt('Nom de la nouvelle colonne:');
         if (!columnTitle) return;
-        
+
         const newColumn = {
             id: window.KanbanUtils?.generateId('col') || 'col_' + Date.now(),
             title: columnTitle,
             cards: []
         };
+
+        // Check if board was empty before
+        const wasEmpty = !boardData.columns || boardData.columns.length === 0;
         
         // Add to data
+        if (!boardData.columns) {
+            boardData.columns = [];
+        }
         boardData.columns.push(newColumn);
-        
-        // Add to DOM
-        const columnsContainer = board.querySelector('.kanban-columns');
-        columnsContainer.insertAdjacentHTML('beforeend', 
-            renderColumn(newColumn, boardData.columns.length - 1, board.dataset.editable === 'true'));
-        
+
+        if (wasEmpty) {
+            // If board was empty, re-render the entire board to remove empty state
+            renderBoard(board, boardData);
+            // Re-initialize interactions
+            initializeBoardInteractions(board);
+            // Restore editing mode if it was active
+            if (board.dataset.editingMode === 'true' && window.KanbanLockManagement) {
+                window.KanbanLockManagement.enableBoardEditing(board);
+            }
+        } else {
+            // Add to existing DOM
+            const columnsContainer = board.querySelector('.kanban-columns');
+            columnsContainer.insertAdjacentHTML('beforeend', 
+                renderColumn(newColumn, boardData.columns.length - 1, board.dataset.editable === 'true'));
+        }
+
         // Save changes
         saveChanges(boardId, 'add_column');
     }
@@ -592,8 +621,14 @@
             boardData.columns.splice(columnIndex, 1);
         }
         
-        // Remove from DOM
-        column.remove();
+        // Check if board becomes empty after deletion
+        if (boardData.columns.length === 0) {
+            // Re-render entire board to show empty state
+            renderBoard(board, boardData);
+        } else {
+            // Just remove from DOM
+            column.remove();
+        }
         
         // Save changes
         saveChanges(boardId, 'delete_column');

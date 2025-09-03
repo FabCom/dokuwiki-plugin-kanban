@@ -226,19 +226,78 @@
             }
         });
 
+        // Add new column button
+        modal.querySelector('#add-new-column').addEventListener('click', () => {
+            const columnTitle = prompt('Nom de la nouvelle colonne:');
+            if (!columnTitle || !columnTitle.trim()) return;
+            
+            // Add to boardData temporarily for the modal
+            const newColumn = {
+                id: 'col_' + Date.now(),
+                title: columnTitle.trim(),
+                cards: []
+            };
+            boardData.columns.push(newColumn);
+            
+            // Add to DOM
+            const newIndex = boardData.columns.length - 1;
+            const newItem = document.createElement('li');
+            newItem.className = 'column-order-item new-column';
+            newItem.draggable = true;
+            newItem.dataset.originalIndex = newIndex;
+            
+            newItem.innerHTML = `
+                <div class="column-order-content">
+                    <span class="column-order-handle">≡</span>
+                    <div class="column-info">
+                        <div class="column-title-input">
+                            <input type="text" class="column-title-field" value="${window.KanbanModalCore.escapeHtml(newColumn.title)}" 
+                                   placeholder="Nom de la colonne" data-column-index="${newIndex}">
+                        </div>
+                        <small>0 carte(s)</small>
+                    </div>
+                    <div class="column-order-controls">
+                        <button type="button" class="kanban-btn-icon move-up" title="Monter">↑</button>
+                        <button type="button" class="kanban-btn-icon move-down" title="Descendre">↓</button>
+                        <button type="button" class="kanban-btn-icon delete-column" title="Supprimer la colonne" data-column-index="${newIndex}">🗑️</button>
+                    </div>
+                </div>
+            `;
+            
+            columnsList.appendChild(newItem);
+            updateButtonStates();
+            
+            // Focus on the new column's title input
+            const titleInput = newItem.querySelector('.column-title-field');
+            titleInput.focus();
+            titleInput.select();
+        });
+
         // Apply button
         modal.querySelector('#apply-column-order').addEventListener('click', () => {
             const items = modal.querySelectorAll('.column-order-item');
             const deletedColumns = [];
             const newOrder = [];
             const updatedTitles = {};
+            const addedColumns = [];
             
-            // Process items and identify deletions
+            // Process items and identify deletions, additions, and changes
             Array.from(items).forEach((item, newIndex) => {
                 const originalIndex = parseInt(item.dataset.originalIndex);
                 
                 if (item.classList.contains('marked-for-deletion')) {
                     deletedColumns.push(originalIndex);
+                } else if (item.classList.contains('new-column')) {
+                    // This is a new column
+                    const titleInput = item.querySelector('.column-title-field');
+                    const newTitle = titleInput.value.trim();
+                    if (newTitle) {
+                        addedColumns.push({
+                            id: boardData.columns[originalIndex].id,
+                            title: newTitle,
+                            cards: []
+                        });
+                    }
                 } else {
                     newOrder.push(originalIndex);
                     
@@ -251,7 +310,7 @@
                 }
             });
             
-            callback(newOrder, updatedTitles, deletedColumns);
+            callback(newOrder, updatedTitles, deletedColumns, addedColumns);
             window.KanbanModalCore.closeModal(modal);
         });
 
@@ -333,6 +392,12 @@
 
         html += `
                     </ul>
+                    
+                    <div class="add-column-section">
+                        <button type="button" class="kanban-btn kanban-btn-primary add-new-column" id="add-new-column">
+                            ➕ Ajouter une nouvelle colonne
+                        </button>
+                    </div>
                 </div>
             </div>
         `;

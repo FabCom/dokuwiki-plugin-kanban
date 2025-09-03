@@ -1693,6 +1693,50 @@
     color: #721c24;
 }
 
+/* Add column section styles */
+.add-column-section {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #dee2e6;
+    text-align: center;
+}
+
+.add-new-column {
+    background: #28a745;
+    color: white;
+    border: 1px solid #28a745;
+    padding: 12px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 200px;
+}
+
+.add-new-column:hover {
+    background: #218838;
+    border-color: #218838;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+
+.add-new-column:active {
+    transform: translateY(0);
+}
+
+/* New column item highlighting */
+.column-order-item.new-column {
+    border-color: #28a745;
+    background: #f8fff9;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.2);
+}
+
+.column-order-item.new-column .column-title-field {
+    background: #f8fff9;
+    border-color: #28a745;
+}
+
 .kanban-modal-btn-danger:hover {
     background: #c82333;
     border-color: #c82333;
