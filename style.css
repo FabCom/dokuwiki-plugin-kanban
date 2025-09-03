@@ -2154,7 +2154,7 @@
 }
 
 .kanban-locked-other {
-    opacity: 0.8;
+    opacity: 0.95; /* Réduction subtile de l'opacité au lieu d'overlay */
 }
 
 .kanban-locked-other .kanban-card {
@@ -2166,18 +2166,28 @@
     cursor: not-allowed !important;
 }
 
-/* Locked overlay effect */
-.kanban-locked-other::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(108, 117, 125, 0.1);
-    z-index: 1;
-    pointer-events: none;
+/* Locked border indicator - subtle visual cue instead of overlay */
+.kanban-locked-other {
+    border: 2px solid #dc3545;
     border-radius: 8px;
+    position: relative;
+}
+
+.kanban-locked-other::after {
+    content: "🔒 Verrouillé par un autre utilisateur";
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(220, 53, 69, 0.9);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 500;
+    z-index: 10006; /* Au-dessus de l'indicateur lecture seule */
+    pointer-events: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 /* Read-only mode styles */
@@ -2211,7 +2221,7 @@
 .kanban-read-only::after {
     content: "👁️ Mode lecture seule";
     position: absolute;
-    top: 10px;
+    top: 0px;
     right: 10px;
     background: rgba(108, 117, 125, 0.9);
     color: white;
@@ -3623,7 +3633,9 @@ body.kanban-fullscreen-active #dw__footer,
 body.kanban-fullscreen-active #dokuwiki__aside,
 body.kanban-fullscreen-active .dw-page-icons,
 body.kanban-fullscreen-active #dw__breadcrumbs,
-body.kanban-fullscreen-active .docInfo {
+body.kanban-fullscreen-active .docInfo,
+body.kanban-fullscreen-active .page-header,
+body.kanban-fullscreen-active h1.sectionedit1 {
     display: none !important;
 }
 
@@ -3694,6 +3706,14 @@ body.kanban-fullscreen-active #dokuwiki__content {
 /* Fullscreen read-only indicator - higher z-index to appear above sticky actions */
 .kanban-board.kanban-fullscreen.kanban-read-only::after {
     z-index: 10010 !important;
+}
+
+/* Fullscreen locked indicator - positioned to not conflict with header */
+.kanban-board.kanban-fullscreen.kanban-locked-other::after {
+    top: 80px; /* Below the sticky header */
+    z-index: 10006 !important;
+    background: rgba(220, 53, 69, 0.95);
+    backdrop-filter: blur(3px);
 }
 
 /* Fullscreen empty state adjustments */
