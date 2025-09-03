@@ -390,5 +390,44 @@ $conf['kanban_enable_fallback_auth'] = false; // PRODUCTION: false
 
 ---
 
+## 💡 **AMÉLIORATIONS UX RÉSOLUES**
+
+### [✅] 1. Délai mode édition tableau sans feedback
+
+**Problème**: Clic sur "Éditer le tableau" sans indication visuelle pendant acquisition verrou  
+**Impact**: 🔄 UX - Utilisateurs cliquent plusieurs fois, confusion sur l'état  
+**Fichiers**: `/lib/plugins/kanban/js/script.js`, `/lib/plugins/kanban/style.css`  
+
+**Solution implémentée**:
+
+- [x] Ajout indicateur de chargement "⏳ Activation..." sur bouton  
+- [x] Spinner CSS animé pendant l'acquisition du verrou
+- [x] Bouton désactivé pour éviter les double-clics
+- [x] Styles `.kanban-btn-loading` et `.kanban-btn:disabled`
+- [x] Suppression logs debug discussions (console.log)
+
+```javascript
+// AVANT: Pas de feedback
+function lockBoard(boardId) {
+    return window.KanbanLockManagement.lockBoard(boardId);
+}
+
+// APRÈS: Feedback visuel complet
+function lockBoard(boardId) {
+    const lockButton = document.querySelector(`#${boardId} .kanban-lock-button`);
+    if (lockButton) {
+        lockButton.innerHTML = '⏳ Activation...';
+        lockButton.disabled = true;
+        lockButton.classList.add('kanban-btn-loading');
+    }
+    // + restoration après réponse
+}
+```
+
+**Date de correction**: 3 septembre 2025  
+**Status**: ✅ UX AMÉLIORÉE - Feedback visuel pendant chargement mode édition
+
+---
+
 **Dernière mise à jour**: 3 septembre 2025  
 **Prochaine révision**: Après chaque correction majeure
