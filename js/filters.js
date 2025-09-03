@@ -93,6 +93,41 @@ class KanbanFilters {
     }
 
     /**
+     * Reset filter status to show all cards
+     */
+    resetFilterStatus() {
+        const statusElement = this.kanbanElement.querySelector('.filter-status');
+        if (statusElement) {
+            statusElement.textContent = 'Tous les éléments visibles';
+        }
+        
+        // Reset filter form inputs
+        const filterForm = this.kanbanElement.querySelector('.filter-form');
+        if (filterForm) {
+            const inputs = filterForm.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                if (input.type === 'checkbox' || input.type === 'radio') {
+                    input.checked = false;
+                } else {
+                    input.value = '';
+                }
+            });
+        }
+    }
+
+    /**
+     * Update filter status for single card view
+     */
+    updateSingleCardFilterStatus(cardId) {
+        const statusElement = this.kanbanElement.querySelector('.filter-status');
+        if (statusElement) {
+            const card = document.getElementById(cardId);
+            const cardTitle = card ? card.querySelector('.kanban-card-title')?.textContent : cardId;
+            statusElement.textContent = `Affichage de la carte: ${cardTitle}`;
+        }
+    }
+
+    /**
      * Create the filter UI elements
      */
     createFilterUI() {

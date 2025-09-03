@@ -172,42 +172,35 @@ class action_plugin_kanban extends ActionPlugin
             }
         }
         
-        // Development fallback: if we're in development/testing and no user is detected
-        if ($currentUser === 'Anonyme' && (
-            strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false ||
-            strpos($_SERVER['SERVER_NAME'] ?? '', 'localhost') !== false ||
-            isset($_GET['debug_user'])
-        )) {
-            // Use a development user name if specified
-            if (isset($_GET['debug_user']) && !empty($_GET['debug_user'])) {
-                $currentUser = 'dev_' . preg_replace('/[^a-zA-Z0-9_]/', '', $_GET['debug_user']);
-                $userId = $currentUser;
-            } elseif (defined('KANBAN_DEV_USER')) {
+        // SECURITY FIX: Remove dangerous fallbacks - enforce strict authentication
+        // Only allow development fallbacks if explicitly enabled in configuration
+        global $conf;
+        $allowFallbackAuth = isset($conf['plugin']['kanban']['enable_fallback_auth']) ? 
+                            $conf['plugin']['kanban']['enable_fallback_auth'] : false;
+        
+        if ($currentUser === 'Anonyme' && $allowFallbackAuth) {
+            // Development fallback: ONLY for localhost and if explicitly enabled
+            $isLocalhost = (
+                strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false ||
+                strpos($_SERVER['SERVER_NAME'] ?? '', 'localhost') !== false ||
+                $_SERVER['SERVER_ADDR'] === '127.0.0.1'
+            );
+            
+            if ($isLocalhost && defined('KANBAN_DEV_USER')) {
                 $currentUser = KANBAN_DEV_USER;
                 $userId = KANBAN_DEV_USER;
+                error_log("Kanban SECURITY: Development fallback user used: $currentUser (localhost only)");
             }
         }
         
-        // If no user detected, create a fallback based on IP or generate a temp user
+        // SECURITY: Log authentication failures and reject anonymous access
         if ($currentUser === 'Anonyme') {
-            // Option 1: Use IP-based identification for demo/development
-            $clientIP = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
-            $tempUser = 'Utilisateur_' . substr(md5($clientIP), 0, 6);
+            error_log("Kanban SECURITY: Authentication failed - no valid user found. Client: " . 
+                     ($_SERVER['REMOTE_ADDR'] ?? 'unknown') . ", User-Agent: " . 
+                     ($_SERVER['HTTP_USER_AGENT'] ?? 'unknown'));
             
-            // Option 2: Use a simple browser-based identification
-            $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
-            if (strpos($userAgent, 'Chrome') !== false) {
-                $tempUser = 'Demo_Chrome_User';
-            } elseif (strpos($userAgent, 'Firefox') !== false) {
-                $tempUser = 'Demo_Firefox_User';
-            } else {
-                $tempUser = 'Demo_User';
-            }
-            
-            $currentUser = $tempUser;
-            $userId = $tempUser;
-            
-            error_log("Kanban: No auth detected, using fallback user: $currentUser");
+            // For read-only operations (JSINFO), we can provide minimal info
+            // But write operations should fail authentication checks elsewhere
         }
         
                 // Debug logging plus visible
@@ -315,21 +308,107 @@ class action_plugin_kanban extends ActionPlugin
     }
 
     /**
+     * Strict authentication validation for write operations
+     * Returns true only if user is properly authenticated
+     */
+    private function validateAuthentication()
+    {
+        global $INFO, $conf;
+        
+        // If ACL is disabled, allow operations
+        if (!$conf['useacl']) {
+            return true;
+        }
+        
+        // Check for valid authenticated user
+        $isAuthenticated = (
+            !empty($INFO['client']) ||
+            !empty($_SERVER['REMOTE_USER']) ||
+            !empty($_SERVER['PHP_AUTH_USER'])
+        );
+        
+        if (!$isAuthenticated) {
+            error_log("Kanban SECURITY: Write operation denied - no authenticated user. IP: " . 
+                     ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+            return false;
+        }
+        
+        return true;
+    }
+
+    /**
+     * Get current authenticated user with security validation
+     * Returns null if no valid authentication found
+     */
+    private function getCurrentUser()
+    {
+        global $INFO, $conf;
+        
+        // Primary: DokuWiki user info
+        if (!empty($INFO['client'])) {
+            return $INFO['client'];
+        }
+        
+        // Fallback: Server authentication
+        if (!empty($_SERVER['REMOTE_USER'])) {
+            return $_SERVER['REMOTE_USER'];
+        }
+        
+        if (!empty($_SERVER['PHP_AUTH_USER'])) {
+            return $_SERVER['PHP_AUTH_USER'];
+        }
+        
+        // SECURITY: Development fallback ONLY if explicitly enabled
+        if (isset($conf['plugin']['kanban']['enable_fallback_auth']) && 
+            $conf['plugin']['kanban']['enable_fallback_auth']) {
+            
+            $isLocalhost = (
+                strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false ||
+                $_SERVER['SERVER_ADDR'] === '127.0.0.1'
+            );
+            
+            if ($isLocalhost && defined('KANBAN_DEV_USER')) {
+                error_log("Kanban SECURITY: Development user used: " . KANBAN_DEV_USER);
+                return KANBAN_DEV_USER;
+            }
+        }
+        
+        return null;
+    }
+    /**
      * Save kanban board data
      */
     private function saveBoardData()
     {
         global $INPUT;
         
+        // SECURITY: Validate authentication before any write operation
+        if (!$this->validateAuthentication()) {
+            error_log("Kanban SECURITY: Save operation denied - authentication failed");
+            http_response_code(401);
+            echo json_encode(['error' => 'Authentication required']);
+            return;
+        }
+        
         $boardId = $INPUT->str('board_id');
         $boardData = $INPUT->str('board_data');
         $changeType = $INPUT->str('change_type', 'modification');
         $pageId = $INPUT->str('id') ?: $INPUT->str('page_id');
         
+        // SECURITY: Validate all required parameters
         if (empty($boardId) || empty($boardData) || empty($pageId)) {
-            error_log("Kanban Plugin: Missing required data - boardId: $boardId, pageId: $pageId, boardData length: " . strlen($boardData));
+            error_log("Kanban SECURITY: Save operation denied - missing required data. User: " . 
+                     ($this->getCurrentUser() ?? 'unknown') . ", IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
             http_response_code(400);
             echo json_encode(['error' => 'Données manquantes (ID page, board ID ou données)']);
+            return;
+        }
+        
+        // SECURITY: Validate page ID format
+        if (!preg_match('/^[a-zA-Z0-9:_-]+$/', $pageId)) {
+            error_log("Kanban SECURITY: Invalid page ID format: $pageId");
+            http_response_code(400);
+            echo json_encode(['error' => 'Format d\'ID de page invalide']);
             return;
         }
         
@@ -661,10 +740,30 @@ class action_plugin_kanban extends ActionPlugin
     {
         global $INPUT, $INFO, $ID, $USERINFO;
         
+        // SECURITY: Validate authentication for lock operations
+        if (!$this->validateAuthentication()) {
+            error_log("Kanban SECURITY: Lock operation denied - authentication failed");
+            http_response_code(401);
+            echo json_encode(['error' => 'Authentication required']);
+            return;
+        }
+        
         $pageId = $INPUT->str('page_id');
-        if (empty($pageId)) {
+        
+        // SECURITY: Validate page ID
+        if (empty($pageId) || !preg_match('/^[a-zA-Z0-9:_-]+$/', $pageId)) {
+            error_log("Kanban SECURITY: Invalid page ID for lock: $pageId");
             http_response_code(400);
-            echo json_encode(['error' => 'ID de page manquant']);
+            echo json_encode(['error' => 'ID de page manquant ou invalide']);
+            return;
+        }
+        
+        // Get authenticated user
+        $currentUser = $this->getCurrentUser();
+        if (!$currentUser) {
+            error_log("Kanban SECURITY: Lock denied - no valid user");
+            http_response_code(401);
+            echo json_encode(['error' => 'Utilisateur non authentifié']);
             return;
         }
         
