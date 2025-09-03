@@ -51,6 +51,45 @@ class KanbanFilters {
         columns.forEach(column => {
             column.classList.remove('empty-filtered');
         });
+
+        this.resetFilterStatus();
+    }
+
+    /**
+     * Show only a specific card (useful for direct links)
+     */
+    showOnlyCard(cardId) {
+        const allCards = this.kanbanElement.querySelectorAll('.kanban-card');
+        const targetCard = document.getElementById(cardId);
+        
+        if (!targetCard) {
+            console.warn(`Card with ID ${cardId} not found`);
+            return;
+        }
+
+        allCards.forEach(cardElement => {
+            if (cardElement.id === cardId) {
+                cardElement.style.display = '';
+                cardElement.classList.remove('filtering-out');
+            } else {
+                cardElement.style.display = 'none';
+                cardElement.classList.add('filtering-out');
+            }
+        });
+
+        // Update column visibility
+        const columns = this.kanbanElement.querySelectorAll('.kanban-column');
+        columns.forEach(column => {
+            const visibleCards = column.querySelectorAll('.kanban-card:not(.filtering-out)');
+            if (visibleCards.length === 0) {
+                column.classList.add('empty-filtered');
+            } else {
+                column.classList.remove('empty-filtered');
+            }
+        });
+
+        // Update filter status
+        this.updateSingleCardFilterStatus(cardId);
     }
 
     /**
@@ -564,6 +603,38 @@ class KanbanFilters {
             if (clearButton) {
                 clearButton.style.display = 'none';
             }
+        }
+    }
+
+    /**
+     * Update filter status for single card display
+     */
+    updateSingleCardFilterStatus(cardId) {
+        const statusContainer = document.getElementById(`filter-status-${this.kanbanId}`);
+        const clearButton = document.getElementById(`clear-filters-${this.kanbanId}`);
+        
+        if (!statusContainer) return;
+
+        const cardElement = document.getElementById(cardId);
+        const cardTitle = cardElement ? cardElement.querySelector('.kanban-card-title')?.textContent : 'Carte';
+        
+        statusContainer.style.display = 'block';
+        statusContainer.querySelector('.kanban-filter-count').textContent = 
+            `🎯 Affichage d'une seule carte: "${cardTitle}"`;
+        
+        // Show active filter for single card
+        const activeFiltersDiv = statusContainer.querySelector('.kanban-active-filters');
+        if (activeFiltersDiv) {
+            activeFiltersDiv.innerHTML = `
+                <span class="kanban-active-filter">
+                    <span class="filter-label">🔗 Lien direct</span>
+                    <button class="filter-remove" onclick="window.kanbanFiltersInstances['${this.kanbanId}'].showAllCards()">×</button>
+                </span>
+            `;
+        }
+        
+        if (clearButton) {
+            clearButton.style.display = 'inline-block';
         }
     }
 

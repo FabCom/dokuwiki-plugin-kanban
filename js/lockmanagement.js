@@ -448,11 +448,8 @@
             actions.style.display = 'none';
         });
         
-        // Disable card titles editing
-        board.querySelectorAll('.kanban-card-title').forEach(title => {
-            title.contentEditable = 'false';
-            title.style.cursor = 'default';
-        });
+        // Disable card titles editing (removed - no longer inline editable)
+        // Card titles are now only editable through the modal
         
         // Disable card drag and drop
         board.querySelectorAll('.kanban-card').forEach(card => {
@@ -493,11 +490,8 @@
             actions.style.display = 'flex';
         });
         
-        // Enable card titles editing
-        board.querySelectorAll('.kanban-card-title').forEach(title => {
-            title.contentEditable = 'true';
-            title.style.cursor = 'text';
-        });
+        // Enable card titles editing (removed - no longer inline editable)
+        // Card titles are now only editable through the modal
         
         // Enable card drag and drop
         board.querySelectorAll('.kanban-card').forEach(card => {

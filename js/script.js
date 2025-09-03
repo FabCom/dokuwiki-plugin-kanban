@@ -42,6 +42,141 @@
                 showErrorInBoard(board, 'Erreur de chargement des données');
             }
         });
+        
+        // Replace AnchorJS links with kanban card copy links
+        replaceAnchorJSLinksInKanban();
+        
+        // Handle direct navigation to cards via URL fragment
+        handleCardNavigation();
+    }
+
+    /**
+     * Replace AnchorJS links with kanban card copy links
+     */
+    function replaceAnchorJSLinksInKanban() {
+        // Find all kanban card titles that have anchorjs links
+        const kanbanCardTitles = document.querySelectorAll('.kanban-card-title');
+        
+        kanbanCardTitles.forEach(titleElement => {
+            const anchorLink = titleElement.querySelector('.anchorjs-link');
+            if (anchorLink) {
+                // Remove the anchorjs link
+                anchorLink.remove();
+                
+                // Get the card element and its ID
+                const cardElement = titleElement.closest('.kanban-card');
+                if (cardElement && cardElement.id) {
+                    // Create our copy link button
+                    const copyLinkBtn = document.createElement('button');
+                    copyLinkBtn.className = 'kanban-copy-link-btn';
+                    copyLinkBtn.innerHTML = '🔗';
+                    copyLinkBtn.title = 'Copier le lien vers cette carte';
+                    copyLinkBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        copyCardLink(cardElement.id);
+                    };
+                    
+                    // Add button to card title
+                    titleElement.appendChild(copyLinkBtn);
+                }
+            }
+        });
+    }
+
+    /**
+     * Copy card link to clipboard
+     */
+    function copyCardLink(cardId) {
+        const baseUrl = window.location.origin + window.location.pathname;
+        const cardUrl = `${baseUrl}#${cardId}`;
+        
+        // Try modern clipboard API first
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(cardUrl).then(() => {
+                showNotification('Lien de la carte copié !', 'success');
+            }).catch(err => {
+                console.error('Erreur lors de la copie:', err);
+                fallbackCopyText(cardUrl);
+            });
+        } else {
+            // Fallback for older browsers
+            fallbackCopyText(cardUrl);
+        }
+    }
+    
+    /**
+     * Fallback copy function for older browsers
+     */
+    function fallbackCopyText(text) {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            document.execCommand('copy');
+            showNotification('Lien de la carte copié !', 'success');
+        } catch (err) {
+            console.error('Erreur lors de la copie:', err);
+            showNotification('Erreur lors de la copie du lien', 'error');
+        }
+        
+        document.body.removeChild(textArea);
+    }
+
+    /**
+     * Handle navigation to specific card via URL fragment
+     */
+    function handleCardNavigation() {
+        const fragment = window.location.hash;
+        if (fragment && fragment.startsWith('#card_')) {
+            const cardId = fragment.substring(1); // Remove the #
+            
+            // Small delay to ensure DOM is fully rendered
+            setTimeout(() => {
+                const cardElement = document.getElementById(cardId);
+                if (cardElement) {
+                    // Find the kanban board containing this card
+                    const kanbanBoard = cardElement.closest('.kanban-board');
+                    if (kanbanBoard && window.kanbanFiltersInstances) {
+                        const filtersInstance = window.kanbanFiltersInstances[kanbanBoard.id];
+                        if (filtersInstance && typeof filtersInstance.showOnlyCard === 'function') {
+                            // Use filters to show only this card
+                            filtersInstance.showOnlyCard(cardId);
+                        }
+                    }
+                    
+                    // Scroll to card
+                    cardElement.scrollIntoView({ 
+                        behavior: 'smooth', 
+                        block: 'center' 
+                    });
+                    
+                    // Highlight the card temporarily
+                    cardElement.style.boxShadow = '0 0 15px #007cba';
+                    cardElement.style.transform = 'scale(1.02)';
+                    cardElement.style.transition = 'all 0.3s ease';
+                    
+                    setTimeout(() => {
+                        cardElement.style.boxShadow = '';
+                        cardElement.style.transform = '';
+                        setTimeout(() => {
+                            cardElement.style.transition = '';
+                        }, 300);
+                    }, 2000);
+                    
+                    // Optionally show card details
+                    showNotification(`Carte "${cardElement.querySelector('.kanban-card-title')?.textContent}" trouvée !`, 'success');
+                } else {
+                    // Card not found, show notification
+                    showNotification('Carte non trouvée', 'error');
+                }
+            }, 500);
+        }
     }
 
     /**
@@ -131,6 +266,11 @@
         contentContainer.innerHTML = html;
         contentContainer.removeAttribute('data-loading');
         
+        // Replace AnchorJS links with our copy link buttons
+        setTimeout(() => {
+            replaceAnchorJSLinksInKanban();
+        }, 100);
+        
         // Charger les indicateurs de discussion de façon asynchrone (seulement si il y a des cartes)
         if (boardData.columns && boardData.columns.length > 0) {
             setTimeout(() => {
@@ -207,6 +347,7 @@
                 <div class="kanban-card-actions">
                     ${creatorTooltip ? `<span class="kanban-info-icon kanban-creator-icon kanban-tooltip" title="${creatorTooltip}">🏗️</span>` : ''}
                     ${modifierTooltip ? `<span class="kanban-info-icon kanban-modifier-icon kanban-tooltip" title="${modifierTooltip}">🔧</span>` : ''}
+                    <button onclick="window.KanbanPlugin.copyCardLink('${cardData.id}')" title="Copier le lien vers cette carte" class="kanban-copy-link-btn">🔗</button>
                     <button onclick="window.KanbanPlugin.viewCard('${cardData.id}')" title="Consulter" class="kanban-view-btn">👁️</button>
                     <button onclick="window.KanbanPlugin.editCard('${cardData.id}')" title="Éditer">✏️</button>
                     <button onclick="window.KanbanPlugin.deleteCard('${cardData.id}')" title="Supprimer">×</button>
@@ -225,7 +366,7 @@
         
         html += `
                 <div class="kanban-card-header">
-                    <h4 class="kanban-card-title" contenteditable="true">${escapeHtml(cardData.title)}</h4>
+                    <h4 class="kanban-card-title">${escapeHtml(cardData.title)}</h4>
                 </div>`;
         
         // Description
@@ -355,6 +496,11 @@
                 setupCardDragAndDrop(newCard);
             }
             
+            // Replace AnchorJS links for the new card
+            setTimeout(() => {
+                replaceAnchorJSLinksInKanban();
+            }, 50);
+            
             // Save changes
             saveChanges(boardId, 'add_card');
         });
@@ -427,9 +573,70 @@
                 setupCardDragAndDrop(newCardElement);
             }
             
+            // Replace AnchorJS links for the updated card
+            setTimeout(() => {
+                replaceAnchorJSLinksInKanban();
+            }, 50);
+            
             // Save changes
             saveChanges(boardId, 'edit_card');
         });
+    }
+
+    /**
+     * Copy link to specific card to clipboard
+     */
+    function copyCardLink(cardId) {
+        const currentUrl = window.location.href;
+        const baseUrl = currentUrl.split('#')[0]; // Remove any existing fragment
+        const cardUrl = `${baseUrl}#${cardId}`;
+        
+        // Use modern Clipboard API if available
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(cardUrl).then(() => {
+                showNotification('Lien copié dans le presse-papiers !', 'success');
+                
+                // Optionally highlight the card briefly
+                const cardElement = document.getElementById(cardId);
+                if (cardElement) {
+                    cardElement.style.boxShadow = '0 0 10px #007cba';
+                    setTimeout(() => {
+                        cardElement.style.boxShadow = '';
+                    }, 1500);
+                }
+            }).catch(() => {
+                fallbackCopyToClipboard(cardUrl);
+            });
+        } else {
+            // Fallback for older browsers
+            fallbackCopyToClipboard(cardUrl);
+        }
+    }
+
+    /**
+     * Fallback copy to clipboard for older browsers
+     */
+    function fallbackCopyToClipboard(text) {
+        // Create temporary textarea
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        try {
+            document.execCommand('copy');
+            showNotification('Lien copié dans le presse-papiers !', 'success');
+        } catch (err) {
+            // Show the URL in a prompt as last resort
+            showNotification('Impossible de copier automatiquement. Voici le lien :', 'info');
+            prompt('Copier ce lien:', text);
+        } finally {
+            textArea.remove();
+        }
     }
 
     /**
@@ -828,9 +1035,9 @@
     }
 
     /**
-     * Move card in data structure
+     * Move card in data structure (between columns or within column with position)
      */
-    function moveCardInData(cardId, targetColumnId) {
+    function moveCardInData(cardId, targetColumnId, targetIndex = -1) {
         // Find the board
         let boardData = null;
         let cardData = null;
@@ -854,7 +1061,50 @@
         if (cardData && boardData) {
             const targetColumn = boardData.columns.find(col => col.id === targetColumnId);
             if (targetColumn) {
-                targetColumn.cards.push(cardData);
+                if (targetIndex >= 0 && targetIndex < targetColumn.cards.length) {
+                    // Insert at specific position
+                    targetColumn.cards.splice(targetIndex, 0, cardData);
+                } else {
+                    // Add to end
+                    targetColumn.cards.push(cardData);
+                }
+            }
+        }
+    }
+
+    /**
+     * Reorder card within the same column
+     */
+    function reorderCardInColumn(cardId, columnId, targetIndex) {
+        // Find the board and column
+        let boardData = null;
+        let cardData = null;
+        let column = null;
+        
+        for (let boardId in kanbanBoards) {
+            boardData = kanbanBoards[boardId];
+            column = boardData.columns.find(col => col.id === columnId);
+            if (column) {
+                const cardIndex = column.cards.findIndex(card => card.id === cardId);
+                if (cardIndex !== -1) {
+                    cardData = column.cards[cardIndex];
+                    // Remove from current position
+                    column.cards.splice(cardIndex, 1);
+                    
+                    // Adjust target index if necessary (removing a card before target affects index)
+                    if (cardIndex < targetIndex) {
+                        targetIndex--;
+                    }
+                    
+                    // Insert at new position
+                    if (targetIndex >= 0 && targetIndex <= column.cards.length) {
+                        column.cards.splice(targetIndex, 0, cardData);
+                    } else {
+                        // Fallback: add to end
+                        column.cards.push(cardData);
+                    }
+                    break;
+                }
             }
         }
     }
@@ -907,6 +1157,7 @@
         addCard,
         editCard,
         viewCard,
+        copyCardLink,
         deleteCard,
         addColumn,
         deleteColumn,
@@ -931,6 +1182,7 @@
 
     // Export functions needed by modules
     window.moveCardInData = moveCardInData;
+    window.reorderCardInColumn = reorderCardInColumn;
     window.saveChanges = saveChanges;
     window.showColumnOrderModal = showColumnOrderModal; // Direct export for fallback
     window.refreshBoardData = refreshBoardData; // Export for refresh functionality
