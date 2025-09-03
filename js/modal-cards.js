@@ -146,8 +146,24 @@
     function showCardViewModal(cardData) {
         const modal = window.KanbanModalCore.createModal('kanban-card-view-modal', 'Consulter la carte');
         
+        // Créer le système d'onglets
+        const tabsContainer = createTabsContainer();
         const form = createCardViewForm(cardData);
-        modal.querySelector('.kanban-modal-body').innerHTML = form;
+        
+        // Structure avec onglets
+        modal.querySelector('.kanban-modal-body').innerHTML = `
+            ${tabsContainer}
+            <div class="tab-content">
+                <div id="tab-info" class="tab-pane active">
+                    ${form}
+                </div>
+                <div id="tab-discussion" class="tab-pane">
+                    <div id="discussion-section-${cardData.id}">
+                        <div class="discussions-loading">Chargement des discussions...</div>
+                    </div>
+                </div>
+            </div>
+        `;
 
         // Add footer with edit option
         const footer = document.createElement('div');
@@ -164,8 +180,184 @@
             window.KanbanModalCore.closeModal(modal);
         });
 
+        // Setup tabs functionality
+        setupTabsEvents(modal);
+
+        // Charger les discussions de façon asynchrone
+        loadCardDiscussions(cardData);
+
         modal.style.display = 'block';
         return modal;
+    }
+
+    /**
+     * Crée le container des onglets
+     */
+    function createTabsContainer() {
+        return `
+            <div class="kanban-modal-tabs">
+                <button class="tab-button active" data-tab="tab-info">
+                    📋 Informations
+                </button>
+                <button class="tab-button" data-tab="tab-discussion">
+                    💬 Discussion
+                    <span class="discussion-count-badge" style="display: none;">0</span>
+                </button>
+            </div>
+        `;
+    }
+
+    /**
+     * Configure les événements des onglets
+     */
+    function setupTabsEvents(modal) {
+        const tabButtons = modal.querySelectorAll('.tab-button');
+        const tabPanes = modal.querySelectorAll('.tab-pane');
+        
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const targetTab = button.getAttribute('data-tab');
+                
+                // Désactiver tous les onglets
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                tabPanes.forEach(pane => pane.classList.remove('active'));
+                
+                // Activer l'onglet sélectionné
+                button.classList.add('active');
+                const targetPane = modal.querySelector(`#${targetTab}`);
+                if (targetPane) {
+                    targetPane.classList.add('active');
+                }
+            });
+        });
+    }
+
+    /**
+     * Charge et affiche les discussions d'une carte
+     */
+    async function loadCardDiscussions(cardData) {
+        try {
+            const pageId = window.JSINFO?.id || 'playground:kanban'; // Page courante ou par défaut
+            const discussionSection = document.getElementById(`discussion-section-${cardData.id}`);
+            
+            if (!discussionSection) {
+                return; // Section non trouvée
+            }
+
+            // Afficher un loading
+            discussionSection.innerHTML = `
+                <div class="kanban-modal-section kanban-discussions-section">
+                    <h4 class="kanban-modal-section-title">💬 Discussion</h4>
+                    <div class="discussions-loading">Chargement des discussions...</div>
+                </div>
+            `;
+
+            // Charger les discussions si le module est disponible
+            if (window.KanbanDiscussions) {
+                const discussions = await window.KanbanDiscussions.loadCardDiscussions(pageId, cardData.id);
+                const discussionHtml = window.KanbanDiscussions.generateDiscussionSection(pageId, cardData.id, discussions);
+                discussionSection.innerHTML = discussionHtml;
+                
+                // Mettre à jour le badge de compteur dans l'onglet
+                updateDiscussionBadge(discussions.length);
+                
+                // Ajouter l'event listener pour le bouton publier
+                setupDiscussionEvents(pageId, cardData.id);
+            } else {
+                // Module discussions non chargé
+                discussionSection.innerHTML = `
+                    <div class="kanban-modal-section kanban-discussions-section">
+                        <h4 class="kanban-modal-section-title">💬 Discussion</h4>
+                        <div class="discussions-error">Module discussions non disponible</div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Erreur chargement discussions:', error);
+            const discussionSection = document.getElementById(`discussion-section-${cardData.id}`);
+            if (discussionSection) {
+                discussionSection.innerHTML = `
+                    <div class="kanban-modal-section kanban-discussions-section">
+                        <h4 class="kanban-modal-section-title">💬 Discussion</h4>
+                        <div class="discussions-error">Erreur lors du chargement des discussions</div>
+                    </div>
+                `;
+            }
+        }
+    }
+
+    /**
+     * Met à jour le badge de compteur de discussion dans l'onglet
+     */
+    function updateDiscussionBadge(count) {
+        const badge = document.querySelector('.discussion-count-badge');
+        if (badge) {
+            if (count > 0) {
+                badge.textContent = count;
+                badge.style.display = 'inline';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+    }
+
+    /**
+     * Configure les événements de la section discussion
+     */
+    function setupDiscussionEvents(pageId, cardId) {
+        const submitBtn = document.querySelector(`.discussion-submit[data-card-id="${cardId}"]`);
+        const textarea = document.getElementById(`new-discussion-${cardId}`);
+        
+        if (submitBtn && textarea) {
+            submitBtn.addEventListener('click', async function() {
+                const message = textarea.value.trim();
+                if (!message) {
+                    alert('Veuillez saisir un message');
+                    return;
+                }
+
+                // Désactiver le bouton pendant l'envoi
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Publication...';
+
+                try {
+                    const user = window.JSINFO?.kanban_user || window.JSINFO?.kanban_user_name || window.JSINFO?.userinfo?.name || window.JSINFO?.client || 'Anonyme';
+                    const success = await window.KanbanDiscussions.addDiscussionMessage(pageId, cardId, message, user);
+                    
+                    if (success) {
+                        // Rechargement des discussions
+                        const discussions = await window.KanbanDiscussions.loadCardDiscussions(pageId, cardId);
+                        const discussionSection = document.getElementById(`discussion-section-${cardId}`);
+                        const discussionHtml = window.KanbanDiscussions.generateDiscussionSection(pageId, cardId, discussions);
+                        discussionSection.innerHTML = discussionHtml;
+                        
+                        // Mettre à jour le badge
+                        updateDiscussionBadge(discussions.length);
+                        
+                        // Mettre à jour l'indicateur sur la carte dans le tableau principal
+                        if (window.KanbanDiscussions && window.KanbanDiscussions.updateCardDiscussionIndicator) {
+                            window.KanbanDiscussions.updateCardDiscussionIndicator(cardId, discussions.length);
+                        }
+                        
+                        // Remettre en place les événements
+                        setupDiscussionEvents(pageId, cardId);
+                        
+                        // Clear textarea
+                        document.getElementById(`new-discussion-${cardId}`).value = '';
+                        
+                    } else {
+                        alert('Erreur lors de la publication du message');
+                    }
+                } catch (error) {
+                    console.error('Erreur publication message:', error);
+                    alert('Erreur lors de la publication du message');
+                } finally {
+                    // Réactiver le bouton
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Publier';
+                }
+            });
+        }
     }
 
     /**

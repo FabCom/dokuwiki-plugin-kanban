@@ -1402,6 +1402,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    width: auto;
 }
 
 .kanban-btn-primary {
@@ -3265,4 +3266,234 @@
 
 .file-status.error {
     color: #dc3545;
+}
+
+/* ================================
+   Discussions Styles
+   ================================ */
+
+.kanban-discussions-section {
+    border-top: 1px solid #e9ecef;
+    margin-top: 20px;
+    padding-top: 20px;
+}
+
+.discussions-container {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 15px;
+    background: #f8f9fa;
+}
+
+.no-discussions {
+    text-align: center;
+    color: #6c757d;
+    font-style: italic;
+    padding: 20px;
+}
+
+.discussion-message {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.discussion-message:last-child {
+    margin-bottom: 0;
+}
+
+.discussion-message-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.discussion-user {
+    font-weight: 600;
+    color: #495057;
+}
+
+.discussion-timestamp {
+    color: #6c757d;
+    font-size: 12px;
+}
+
+.discussion-edited {
+    color: #ffc107;
+    font-size: 11px;
+    font-style: italic;
+}
+
+.discussion-message-content {
+    color: #212529;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.discussion-form {
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 15px;
+    background: white;
+}
+
+.discussion-input {
+    width: 100%;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    padding: 10px;
+    font-family: inherit;
+    font-size: 14px;
+    resize: vertical;
+    min-height: 80px;
+    margin-bottom: 10px;
+}
+
+.discussion-input:focus {
+    outline: none;
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.discussion-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.discussion-submit {
+    background: #007bff;
+    color: white;
+    border: 1px solid #007bff;
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.discussion-submit:hover {
+    background: #0056b3;
+    border-color: #0056b3;
+}
+
+.discussion-submit:disabled {
+    background: #6c757d;
+    border-color: #6c757d;
+    cursor: not-allowed;
+}
+
+/* Messages compacts sur mobile */
+@media (max-width: 768px) {
+    .discussions-container {
+        max-height: 250px;
+        padding: 10px;
+    }
+    
+    .discussion-message {
+        padding: 8px;
+        margin-bottom: 8px;
+    }
+    
+    .discussion-message-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+    
+    .discussion-input {
+        min-height: 60px;
+    }
+}
+
+/* ================================
+   Modal Tabs System
+   ================================ */
+
+.kanban-modal-tabs {
+    display: flex;
+    border-bottom: 2px solid #e9ecef;
+    margin-bottom: 20px;
+    background: #f8f9fa;
+    border-radius: 6px 6px 0 0;
+}
+
+.tab-button {
+    padding: 12px 20px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #6c757d;
+    border-radius: 6px 6px 0 0;
+    transition: all 0.2s ease;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tab-button:hover {
+    background: #e9ecef;
+    color: #495057;
+}
+
+.tab-button.active {
+    background: white;
+    color: #007bff;
+    border-bottom: 2px solid #007bff;
+    font-weight: 600;
+}
+
+.tab-content {
+    position: relative;
+}
+
+.tab-pane {
+    display: none;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+.discussion-count-badge {
+    background: #dc3545;
+    color: white;
+    border-radius: 10px;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    min-width: 18px;
+    text-align: center;
+}
+
+/* Responsive tabs */
+@media (max-width: 768px) {
+    .kanban-modal-tabs {
+        flex-direction: column;
+    }
+    
+    .tab-button {
+        border-radius: 0;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .tab-button:last-child {
+        border-bottom: none;
+    }
+    
+    .tab-button.active {
+        border-bottom: 1px solid #dee2e6;
+        border-left: 3px solid #007bff;
+    }
 }

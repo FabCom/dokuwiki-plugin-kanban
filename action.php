@@ -77,6 +77,11 @@ class action_plugin_kanban extends ActionPlugin
         
         $event->data['script'][] = [
             'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/discussions.js'
+        ];
+        
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-main.js'
         ];
         
@@ -278,6 +283,12 @@ class action_plugin_kanban extends ActionPlugin
                     break;
                 case 'renew_lock':
                     $this->renewLock();
+                    break;
+                case 'get_discussions':
+                    $this->getCardDiscussions();
+                    break;
+                case 'save_discussions':
+                    $this->saveCardDiscussions();
                     break;
                 default:
                     http_response_code(400);
@@ -1014,5 +1025,107 @@ class action_plugin_kanban extends ActionPlugin
             'title' => 'Kanban Board',
             'columns' => $columns
         ];
+    }
+
+    /**
+     * Get card discussions from a discussion page
+     */
+    private function getCardDiscussions()
+    {
+        global $INPUT;
+        
+        $discussionPageId = $INPUT->str('id');
+        
+        if (!$discussionPageId) {
+            http_response_code(400);
+            echo json_encode(['error' => 'ID de page de discussion requis']);
+            return;
+        }
+
+        try {
+            // Utiliser les fonctions DokuWiki pour lire une page
+            $discussionContent = rawWiki($discussionPageId);
+            
+            if (empty($discussionContent)) {
+                // Page n'existe pas ou est vide
+                echo json_encode(['discussions' => []]);
+                return;
+            }
+            
+            // Essayer de parser le JSON
+            $discussionData = json_decode($discussionContent, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                // Si ce n'est pas du JSON valide, considérer comme vide
+                echo json_encode(['discussions' => []]);
+                return;
+            }
+            
+            // Vérifier la structure attendue
+            if (isset($discussionData['messages']) && is_array($discussionData['messages'])) {
+                echo json_encode(['discussions' => $discussionData['messages']]);
+            } else {
+                echo json_encode(['discussions' => []]);
+            }
+            
+        } catch (Exception $e) {
+            error_log("Erreur lecture discussions: " . $e->getMessage());
+            echo json_encode(['discussions' => []]);
+        }
+    }
+
+    /**
+     * Save card discussions to a discussion page
+     */
+    private function saveCardDiscussions()
+    {
+        global $INPUT, $INFO;
+        
+        $discussionPageId = $INPUT->str('id');
+        $discussionData = $INPUT->str('data');
+        
+        if (!$discussionPageId || !$discussionData) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Données requises manquantes']);
+            return;
+        }
+
+        try {
+            // Vérifier que les données sont du JSON valide
+            $decodedData = json_decode($discussionData, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Données JSON invalides']);
+                return;
+            }
+            
+            // Obtenir l'utilisateur courant
+            $currentUser = 'Anonyme';
+            if (!empty($INFO['userinfo']['name'])) {
+                $currentUser = $INFO['userinfo']['name'];
+            } elseif (!empty($INFO['userinfo']['mail'])) {
+                $currentUser = $INFO['userinfo']['mail'];
+            }
+            
+            // Ajouter des métadonnées de sauvegarde
+            $decodedData['lastSavedBy'] = $currentUser;
+            $decodedData['lastSavedAt'] = date('c');
+            
+            // Reformater en JSON propre
+            $jsonContent = json_encode($decodedData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+            
+            // Utiliser saveWikiText pour sauvegarder
+            $summary = 'Mise à jour des discussions de carte (automatique)';
+            
+            // Sauvegarder la page
+            saveWikiText($discussionPageId, $jsonContent, $summary);
+            
+            echo json_encode(['success' => true]);
+            
+        } catch (Exception $e) {
+            error_log("Erreur sauvegarde discussions: " . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['error' => 'Erreur lors de la sauvegarde']);
+        }
     }
 }

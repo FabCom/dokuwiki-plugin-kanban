@@ -78,6 +78,21 @@
         
         contentContainer.innerHTML = html;
         contentContainer.removeAttribute('data-loading');
+        
+        // Charger les indicateurs de discussion de façon asynchrone
+        setTimeout(() => {
+            initializeDiscussionIndicators(boardContainer);
+        }, 100);
+    }
+
+    /**
+     * Initialise les indicateurs de discussion pour toutes les cartes
+     */
+    async function initializeDiscussionIndicators(boardContainer) {
+        if (window.KanbanDiscussions && window.KanbanDiscussions.updateAllDiscussionIndicators) {
+            const pageId = window.JSINFO?.id || 'playground:kanban';
+            await window.KanbanDiscussions.updateAllDiscussionIndicators(pageId);
+        }
     }
 
     /**
