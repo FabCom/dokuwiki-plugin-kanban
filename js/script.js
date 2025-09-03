@@ -542,6 +542,9 @@
      * Edit an existing card
      */
     function editCard(cardId) {
+        // Afficher immédiatement un indicateur de chargement
+        showEditingLoading(cardId);
+        
         const cardElement = document.getElementById(cardId);
         const board = cardElement.closest('.kanban-board');
         const boardId = board.id;
@@ -554,33 +557,113 @@
             if (cardData) break;
         }
         
-        if (!cardData) return;
+        if (!cardData) {
+            hideEditingLoading(cardId);
+            return;
+        }
         
-        showCardModal(cardData, function(updatedData) {
-            // Update card data with modification metadata
-            updatedData.lastModified = getCurrentDateTime();
-            updatedData.lastModifiedBy = getCurrentUser();
-            
-            // Update card in data
-            Object.assign(cardData, updatedData);
-            
-            // Re-render card in DOM
-            cardElement.outerHTML = renderCard(cardData);
-            
-            // Re-setup interactions
-            const newCardElement = document.getElementById(cardId);
-            if (board.dataset.sortable === 'true') {
-                setupCardDragAndDrop(newCardElement);
+        // Petite pause pour permettre l'affichage du loading
+        setTimeout(() => {
+            try {
+                showCardModal(cardData, function(updatedData) {
+                    // Masquer le loading
+                    hideEditingLoading(cardId);
+                    
+                    // Update card data with modification metadata
+                    updatedData.lastModified = getCurrentDateTime();
+                    updatedData.lastModifiedBy = getCurrentUser();
+                    
+                    // Update card in data
+                    Object.assign(cardData, updatedData);
+                    
+                    // Re-render card in DOM
+                    cardElement.outerHTML = renderCard(cardData);
+                    
+                    // Re-setup interactions
+                    const newCardElement = document.getElementById(cardId);
+                    if (board.dataset.sortable === 'true') {
+                        setupCardDragAndDrop(newCardElement);
+                    }
+                    
+                    // Replace AnchorJS links for the updated card
+                    setTimeout(() => {
+                        replaceAnchorJSLinksInKanban();
+                    }, 50);
+                    
+                    // Save changes
+                    saveChanges(boardId, 'edit_card');
+                });
+            } catch (error) {
+                console.error('Erreur lors de l\'ouverture du modal d\'édition:', error);
+                hideEditingLoading(cardId);
+                showNotification('Erreur lors de l\'ouverture du mode édition', 'error');
             }
+        }, 10); // Petite pause pour permettre l'affichage du loading
+    }
+
+    /**
+     * Affiche un indicateur de chargement sur le bouton d'édition
+     */
+    function showEditingLoading(cardId) {
+        const cardElement = document.getElementById(cardId);
+        if (!cardElement) return;
+        
+        const editButton = cardElement.querySelector('button[onclick*="editCard"]');
+        if (editButton) {
+            // Sauvegarder l'état original
+            editButton.dataset.originalHtml = editButton.innerHTML;
+            editButton.dataset.originalTitle = editButton.title;
             
-            // Replace AnchorJS links for the updated card
-            setTimeout(() => {
-                replaceAnchorJSLinksInKanban();
-            }, 50);
+            // Afficher l'indicateur de chargement
+            editButton.innerHTML = '⏳';
+            editButton.title = 'Ouverture du mode édition...';
+            editButton.disabled = true;
+            editButton.style.opacity = '0.7';
             
-            // Save changes
-            saveChanges(boardId, 'edit_card');
-        });
+            // Ajouter une classe CSS pour l'animation
+            editButton.classList.add('kanban-loading');
+        }
+        
+        // Ajouter un overlay sur la carte pour indiquer le chargement
+        const overlay = document.createElement('div');
+        overlay.className = 'kanban-card-loading-overlay';
+        overlay.innerHTML = `
+            <div class="kanban-loading-spinner">
+                <div class="kanban-spinner"></div>
+                <span>Ouverture...</span>
+            </div>
+        `;
+        overlay.dataset.cardId = cardId;
+        cardElement.style.position = 'relative';
+        cardElement.appendChild(overlay);
+    }
+    
+    /**
+     * Masque l'indicateur de chargement
+     */
+    function hideEditingLoading(cardId) {
+        const cardElement = document.getElementById(cardId);
+        if (!cardElement) return;
+        
+        const editButton = cardElement.querySelector('button[onclick*="editCard"]');
+        if (editButton && editButton.dataset.originalHtml) {
+            // Restaurer l'état original
+            editButton.innerHTML = editButton.dataset.originalHtml;
+            editButton.title = editButton.dataset.originalTitle || 'Éditer';
+            editButton.disabled = false;
+            editButton.style.opacity = '1';
+            editButton.classList.remove('kanban-loading');
+            
+            // Nettoyer les données
+            delete editButton.dataset.originalHtml;
+            delete editButton.dataset.originalTitle;
+        }
+        
+        // Supprimer l'overlay
+        const overlay = cardElement.querySelector('.kanban-card-loading-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
     }
 
     /**
@@ -889,7 +972,35 @@
      */
     function lockBoard(boardId) {
         if (window.KanbanLockManagement && window.KanbanLockManagement.lockBoard) {
-            return window.KanbanLockManagement.lockBoard(boardId);
+            // Afficher le feedback visuel sur le bouton
+            const lockButton = document.querySelector(`#${boardId} .kanban-lock-button`);
+            if (lockButton) {
+                // Sauvegarder l'état original
+                lockButton.dataset.originalText = lockButton.innerHTML;
+                lockButton.dataset.originalTitle = lockButton.title;
+                
+                // Appliquer l'état de chargement
+                lockButton.innerHTML = '⏳ Activation...';
+                lockButton.title = 'Activation du mode édition en cours...';
+                lockButton.disabled = true;
+                lockButton.classList.add('kanban-btn-loading');
+            }
+            
+            // Appeler la fonction de verrouillage
+            const lockPromise = window.KanbanLockManagement.lockBoard(boardId);
+            
+            // Restaurer l'état du bouton après la réponse (succès ou échec)
+            if (lockPromise && typeof lockPromise.then === 'function') {
+                lockPromise.finally(() => {
+                    if (lockButton) {
+                        lockButton.disabled = false;
+                        lockButton.classList.remove('kanban-btn-loading');
+                        // Le texte et titre seront mis à jour par updateLockUI ou en cas d'erreur
+                    }
+                });
+            }
+            
+            return lockPromise;
         } else {
             console.error('KanbanLockManagement module not available');
             showNotification('Module de gestion des verrous non disponible', 'error');

@@ -136,8 +136,6 @@
             }
 
             const responseText = await response.text();
-            console.log('Raw response:', responseText); // DEBUG: voir la réponse brute
-            
             const data = JSON.parse(responseText);
             
             // Structure de réponse du gestionnaire AJAX : {success: true, message: '', data: {discussions: []}}
@@ -388,8 +386,6 @@
         
         // Charger les cartes non mises en cache
         if (uncachedCards.length > 0) {
-            console.log(`🔄 Batch loading discussions for ${uncachedCards.length} cards`);
-            
             // Charger en parallèle avec limitation
             const batchSize = 5; // Limiter à 5 appels parallèles
             for (let i = 0; i < uncachedCards.length; i += batchSize) {
@@ -407,7 +403,6 @@
         // Mettre en cache le batch complet
         setCacheEntry(batchKey, results);
         
-        console.log(`✅ Batch discussion counts loaded:`, results);
         return results;
     }
 

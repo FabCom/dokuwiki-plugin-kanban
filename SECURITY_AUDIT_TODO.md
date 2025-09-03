@@ -117,7 +117,7 @@ class KanbanLockManager {
 
 ## ⚠️ **RISQUES DE SÉCURITÉ MODÉRÉS** (Urgence 2)
 
-### [✅] 5. XSS potentiel - `syntax.php:200-220`
+### [✅] 5. XSS potentiel - `syntax.php:200-220` ✅ CORRIGÉ
 **Risque**: Injection JavaScript via nom d'utilisateur  
 **Impact**: 🔶 MODÉRÉ - Exécution de code côté client  
 
@@ -138,7 +138,7 @@ $renderer->doc .= 'JSINFO.kanban_user = ' . json_encode($currentUser) . ';';
 
 ---
 
-### [✅] 6. Gestion d'erreurs incohérente
+### [✅] 6. Gestion d'erreurs incohérente ✅ CORRIGÉ
 **Risque**: Fuite d'informations sensibles  
 **Impact**: 🔶 MODÉRÉ - Information disclosure  
 
@@ -156,6 +156,35 @@ $renderer->doc .= 'JSINFO.kanban_user = ' . json_encode($currentUser) . ';';
 
 **Date de correction**: 3 septembre 2025  
 **Status**: ✅ ERREURS STANDARDISÉES - Système centralisé implémenté, fuites évitées
+
+---
+
+### [ ] 7. Validation des données côté client insuffisante
+**Risque**: Bypass des validations via manipulation DOM  
+**Impact**: 🔶 MODÉRÉ - Données corrompues, bypass validations  
+**Fichiers concernés**: `js/script.js`, `js/modal-*.js`
+
+**Actions requises**:
+- [ ] Audit complet des validations JavaScript existantes
+- [ ] Renforcement validations côté serveur (ne jamais faire confiance au client)
+- [ ] Validation stricte des formats : emails, dates, URLs, etc.
+- [ ] Limitation des tailles de chaînes et nombres
+- [ ] Protection contre injection de code dans les champs libres
+- [ ] Tests de sécurité avec données malformées
+
+---
+
+### [ ] 8. Sessions et tokens CSRF
+**Risque**: Attaques CSRF, session hijacking  
+**Impact**: 🔶 MODÉRÉ - Actions non autorisées au nom de l'utilisateur  
+**Fichiers concernés**: Tous les appels AJAX
+
+**Actions requises**:
+- [ ] Audit des protections CSRF existantes dans DokuWiki
+- [ ] Vérification systématique des tokens dans tous les endpoints
+- [ ] Implémentation de tokens par session/action
+- [ ] Protection contre les attaques de fixation de session
+- [ ] Logs de sécurité pour tentatives CSRF détectées
 
 ---
 
@@ -224,7 +253,30 @@ $renderer->doc .= 'JSINFO.kanban_user = ' . json_encode($currentUser) . ';';
 
 ## 🚀 **NOUVELLES FONCTIONNALITÉS** (Urgence 4)
 
-### [ ] 10. Audit trail et logs
+### [✅] 10. Amélioration UX - Indicateurs de chargement mode édition ✅ COMPLÉTÉ
+**Fonctionnalité**: Retour visuel immédiat lors de l'ouverture du mode édition  
+**Impact**: 🟢 FAIBLE - Amélioration expérience utilisateur  
+
+**Problème identifié**: Délai d'ouverture du modal d'édition sans retour visuel
+**Solution implémentée**:
+- [✅] Indicateur de chargement sur le bouton d'édition (⏳ + animation)
+- [✅] Overlay semi-transparent sur la carte avec spinner pendant le chargement
+- [✅] Modal affiché immédiatement avec contenu de chargement temporaire
+- [✅] Génération asynchrone du formulaire pour ne pas bloquer l'UI
+- [✅] Gestion d'erreurs avec message d'erreur approprié
+- [✅] Styles CSS avec animations fluides
+
+**Fichiers modifiés**:
+- [✅] `js/script.js` - Fonctions `showEditingLoading()` et `hideEditingLoading()`
+- [✅] `js/modal-cards.js` - Affichage asynchrone du modal avec loading
+- [✅] `style.css` - Styles pour indicateurs de chargement et animations
+
+**Date de correction**: 3 septembre 2025  
+**Status**: ✅ UX AMÉLIORÉE - Retour visuel immédiat et chargement optimisé
+
+---
+
+### [ ] 11. Audit trail et logs
 **Fonctionnalité**: Historique complet des modifications  
 
 **Actions requises**:

@@ -11,132 +11,165 @@
      * Show card editing modal
      */
     function showCardModal(cardData, callback) {
+        // Performance: Créer et afficher le modal immédiatement avec un contenu minimal
         const modal = window.KanbanModalCore.createModal('kanban-card-modal', 'Éditer la carte');
         
-        const form = createCardForm(cardData);
-        modal.querySelector('.kanban-modal-body').innerHTML = form;
-
-        // Add footer
-        const footer = document.createElement('div');
-        footer.className = 'kanban-modal-footer';
-        footer.innerHTML = `
-            <button type="submit" class="kanban-btn kanban-btn-primary" form="kanban-card-form">💾 Sauvegarder</button>
-            <button type="button" class="kanban-btn kanban-btn-secondary kanban-modal-cancel">❌ Annuler</button>
+        // Afficher le modal avec un loading temporaire
+        modal.querySelector('.kanban-modal-body').innerHTML = `
+            <div class="kanban-modal-loading">
+                <div class="kanban-loading-spinner">
+                    <div class="kanban-spinner"></div>
+                    <span>Chargement du formulaire...</span>
+                </div>
+            </div>
         `;
         
-        const innerModal = modal.querySelector('.kanban-modal');
-        innerModal.appendChild(footer);
-
-        // Bind form submission
-        const formElement = modal.querySelector('#kanban-card-form');
-        formElement.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(formElement);
-            const updatedData = Object.assign({}, cardData);
-            
-            // Basic fields
-            updatedData.title = formData.get('title');
-            updatedData.description = formData.get('description');
-            updatedData.priority = formData.get('priority');
-            updatedData.assignee = formData.get('assignee');
-            updatedData.dueDate = formData.get('dueDate');
-            
-            // Parse tags
-            const tagsInput = formData.get('tags');
-            updatedData.tags = tagsInput ? tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
-            
-            // Extract internal links from form
-            const internalLinksList = modal.querySelector('#internal-links-list-inline');
-            const internalLinks = [];
-            if (internalLinksList) {
-                internalLinksList.querySelectorAll('.internal-link-item').forEach(item => {
-                    internalLinks.push({
-                        target: item.dataset.target,
-                        text: item.dataset.text || ''
-                    });
-                });
-            }
-            updatedData.internalLinks = internalLinks;
-            
-            // Extract external links from form
-            const externalLinksList = modal.querySelector('#external-links-list-inline');
-            const externalLinks = [];
-            if (externalLinksList) {
-                externalLinksList.querySelectorAll('.external-link-item').forEach(item => {
-                    externalLinks.push({
-                        url: item.dataset.url,
-                        text: item.dataset.text || ''
-                    });
-                });
-            }
-            updatedData.externalLinks = externalLinks;
-            
-            // Keep existing media attachments
-            if (cardData.media) {
-                updatedData.media = cardData.media;
-            }
-            
-            // Keep existing metadata
-            if (!updatedData.created) {
-                updatedData.created = window.KanbanUtils?.getCurrentDateTime()?.split(' ')[0] || new Date().toISOString().split('T')[0];
-            }
-            if (!updatedData.creator) {
-                updatedData.creator = window.KanbanUtils?.getCurrentUser() || 'Utilisateur';
-            }
-            
-            callback(updatedData);
-            window.KanbanModalCore.closeModal(modal);
-        });
-
-        // Bind cancel button
-        modal.querySelector('.kanban-modal-cancel').addEventListener('click', () => {
-            window.KanbanModalCore.closeModal(modal);
-        });
-
-        // Bind add internal link button
-        const addLinkBtn = modal.querySelector('#add-internal-link');
-        if (addLinkBtn && window.KanbanModalLinks) {
-            addLinkBtn.addEventListener('click', () => {
-                window.KanbanModalLinks.showPageBrowserModal((selectedPage) => {
-                    if (selectedPage) {
-                        addInternalLinkToCard(modal, selectedPage.id, selectedPage.title);
-                    }
-                });
-            });
-        }
-
-        // Bind add media button
-        const addMediaBtn = modal.querySelector('#add-media');
-        if (addMediaBtn && window.KanbanMediaManager) {
-            addMediaBtn.addEventListener('click', () => {
-                window.KanbanMediaManager.showMediaBrowser((selectedMedia) => {
-                    if (selectedMedia) {
-                        addMediaToCard(modal, cardData, selectedMedia);
-                    }
-                });
-            });
-        }
-
-        // Bind add external link button
-        const addExternalLinkBtn = modal.querySelector('#add-external-link');
-        if (addExternalLinkBtn) {
-            addExternalLinkBtn.addEventListener('click', () => {
-                showExternalLinkModal((url, title) => {
-                    if (url) {
-                        addExternalLinkToCard(modal, url, title);
-                    }
-                });
-            });
-        }
-
-        // Bind remove link buttons
-        bindRemoveLinkButtons(modal);
-        
-        // Bind remove media buttons
-        bindRemoveMediaButtons(modal, cardData);
-
+        // Afficher immédiatement le modal
         modal.style.display = 'block';
+        
+        // Générer le contenu de façon asynchrone pour ne pas bloquer l'UI
+        setTimeout(() => {
+            try {
+                const form = createCardForm(cardData);
+                modal.querySelector('.kanban-modal-body').innerHTML = form;
+
+                // Add footer
+                const footer = document.createElement('div');
+                footer.className = 'kanban-modal-footer';
+                footer.innerHTML = `
+                    <button type="submit" class="kanban-btn kanban-btn-primary" form="kanban-card-form">💾 Sauvegarder</button>
+                    <button type="button" class="kanban-btn kanban-btn-secondary kanban-modal-cancel">❌ Annuler</button>
+                `;
+                
+                const innerModal = modal.querySelector('.kanban-modal');
+                innerModal.appendChild(footer);
+
+                // Bind form submission
+                const formElement = modal.querySelector('#kanban-card-form');
+                formElement.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const formData = new FormData(formElement);
+                    const updatedData = Object.assign({}, cardData);
+                    
+                    // Basic fields
+                    updatedData.title = formData.get('title');
+                    updatedData.description = formData.get('description');
+                    updatedData.priority = formData.get('priority');
+                    updatedData.assignee = formData.get('assignee');
+                    updatedData.dueDate = formData.get('dueDate');
+                    
+                    // Parse tags
+                    const tagsInput = formData.get('tags');
+                    updatedData.tags = tagsInput ? tagsInput.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
+                    
+                    // Extract internal links from form
+                    const internalLinksList = modal.querySelector('#internal-links-list-inline');
+                    const internalLinks = [];
+                    if (internalLinksList) {
+                        internalLinksList.querySelectorAll('.internal-link-item').forEach(item => {
+                            internalLinks.push({
+                                target: item.dataset.target,
+                                text: item.dataset.text || ''
+                            });
+                        });
+                    }
+                    updatedData.internalLinks = internalLinks;
+                    
+                    // Extract external links from form
+                    const externalLinksList = modal.querySelector('#external-links-list-inline');
+                    const externalLinks = [];
+                    if (externalLinksList) {
+                        externalLinksList.querySelectorAll('.external-link-item').forEach(item => {
+                            externalLinks.push({
+                                url: item.dataset.url,
+                                text: item.dataset.text || ''
+                            });
+                        });
+                    }
+                    updatedData.externalLinks = externalLinks;
+                    
+                    // Keep existing media attachments
+                    if (cardData.media) {
+                        updatedData.media = cardData.media;
+                    }
+                    
+                    // Keep existing metadata
+                    if (!updatedData.created) {
+                        updatedData.created = window.KanbanUtils?.getCurrentDateTime()?.split(' ')[0] || new Date().toISOString().split('T')[0];
+                    }
+                    if (!updatedData.creator) {
+                        updatedData.creator = window.KanbanUtils?.getCurrentUser() || 'Utilisateur';
+                    }
+                    
+                    callback(updatedData);
+                    window.KanbanModalCore.closeModal(modal);
+                });
+
+                // Bind cancel button
+                modal.querySelector('.kanban-modal-cancel').addEventListener('click', () => {
+                    window.KanbanModalCore.closeModal(modal);
+                });
+
+                // Bind add internal link button
+                const addLinkBtn = modal.querySelector('#add-internal-link');
+                if (addLinkBtn && window.KanbanModalLinks) {
+                    addLinkBtn.addEventListener('click', () => {
+                        window.KanbanModalLinks.showPageBrowserModal((selectedPage) => {
+                            if (selectedPage) {
+                                addInternalLinkToCard(modal, selectedPage.id, selectedPage.title);
+                            }
+                        });
+                    });
+                }
+
+                // Bind add media button
+                const addMediaBtn = modal.querySelector('#add-media');
+                if (addMediaBtn && window.KanbanMediaManager) {
+                    addMediaBtn.addEventListener('click', () => {
+                        window.KanbanMediaManager.showMediaBrowser((selectedMedia) => {
+                            if (selectedMedia) {
+                                addMediaToCard(modal, cardData, selectedMedia);
+                            }
+                        });
+                    });
+                }
+
+                // Bind add external link button
+                const addExternalLinkBtn = modal.querySelector('#add-external-link');
+                if (addExternalLinkBtn) {
+                    addExternalLinkBtn.addEventListener('click', () => {
+                        showExternalLinkModal((url, title) => {
+                            if (url) {
+                                addExternalLinkToCard(modal, url, title);
+                            }
+                        });
+                    });
+                }
+
+                // Bind remove link buttons
+                bindRemoveLinkButtons(modal);
+                
+                // Bind remove media buttons
+                bindRemoveMediaButtons(modal, cardData);
+                
+                // Focus on title field
+                const titleField = modal.querySelector('#card-title');
+                if (titleField) {
+                    titleField.focus();
+                }
+                
+            } catch (error) {
+                console.error('Erreur lors de la création du formulaire modal:', error);
+                modal.querySelector('.kanban-modal-body').innerHTML = `
+                    <div class="kanban-modal-error">
+                        <p>❌ Erreur lors du chargement du formulaire</p>
+                        <button onclick="window.KanbanModalCore.closeModal(this.closest('.kanban-modal-overlay'))" class="kanban-btn">Fermer</button>
+                    </div>
+                `;
+            }
+        }, 1); // Très court délai pour permettre l'affichage du modal
+
         return modal;
     }
 
