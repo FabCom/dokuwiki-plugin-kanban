@@ -1037,8 +1037,6 @@
      * Load media list using DokuWiki endpoints
      */
     function loadMediaList(namespace, mediaModal) {
-        console.log('📂 Loading media for namespace:', namespace);
-        
         updateBreadcrumb(namespace, mediaModal);
         loadFolders(namespace, mediaModal);
         loadFiles(namespace, mediaModal);
@@ -1288,8 +1286,6 @@
         if (parentModal) {
             parentModal.style.display = 'block';
         }
-        
-        console.log('📎 Media selected:', mediaData);
     }
 
     /**
@@ -1365,8 +1361,6 @@
         
         // Update the display
         updateMediaDisplay(modal, cardData);
-        
-        console.log('📎 Media added to card:', mediaItem);
     }
 
     /**
@@ -1415,8 +1409,6 @@
                     
                     // Update display
                     updateMediaDisplay(modal, cardData);
-                    
-                    console.log('📎 Media removed from card:', mediaId);
                 }
             });
         });

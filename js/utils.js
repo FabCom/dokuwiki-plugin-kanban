@@ -236,6 +236,4 @@
         deepClone
     };
 
-    console.log('🔧 KanbanUtils module loaded');
-
 })();

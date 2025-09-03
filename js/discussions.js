@@ -18,13 +18,11 @@
             }
 
             const responseText = await response.text();
-            console.log('Response text:', responseText); // Debug
             
             try {
                 const data = JSON.parse(responseText);
                 return data.discussions || [];
             } catch (e) {
-                console.error('JSON parse error:', e, 'Response:', responseText);
                 throw new Error('Réponse serveur invalide');
             }ées aux cartes via les pages discussion DokuWiki
  */

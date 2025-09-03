@@ -651,6 +651,4 @@
     // Alias pour compatibilité avec les boutons HTML
     window.KanbanLockManager = window.KanbanLockManagement;
 
-    console.log('🔒 KanbanLockManagement module loaded');
-
 })();

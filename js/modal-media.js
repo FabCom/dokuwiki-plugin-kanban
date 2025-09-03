@@ -765,7 +765,5 @@
     window.KanbanMediaManager = {
         showMediaBrowser
     };
-    
-    console.log('🎬 KanbanMediaManager module loaded');
 
 })();

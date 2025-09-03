@@ -59,35 +59,27 @@ class KanbanFilters {
     createFilterUI() {
         const kanbanElement = this.kanbanElement;
         if (!kanbanElement) {
-            console.error('Kanban element not found for ID:', this.kanbanId);
             return;
         }
 
         // Find the filters container that was already rendered by PHP
         const filtersContainer = kanbanElement.querySelector('.kanban-filters-container');
         if (!filtersContainer) {
-            console.warn('Filters container not found for kanban:', this.kanbanId);
-            console.log('Available elements in kanban:', kanbanElement.innerHTML.substring(0, 200) + '...');
-            
             // Try again in a moment - the content might still be loading
             setTimeout(() => {
                 const retryContainer = kanbanElement.querySelector('.kanban-filters-container');
                 if (retryContainer) {
-                    console.log('Filters container found on retry for:', this.kanbanId);
                     this.populateDynamicFilters();
                     // Bind events only once
                     if (!this.eventsBindingDone) {
                         this.bindEvents();
                         this.eventsBindingDone = true;
                     }
-                } else {
-                    console.error('Filters container still not found after retry for:', this.kanbanId);
                 }
             }, 500);
             return;
         }
 
-        console.log('Filters container found for:', this.kanbanId);
         // The HTML is already there, we just need to populate dynamic elements
         this.populateDynamicFilters();
         
@@ -116,12 +108,9 @@ class KanbanFilters {
      * Bind event listeners
      */
     bindEvents() {
-        console.log('Binding events for kanban:', this.kanbanId); // Debug log
-        
         // Check if filters container exists before binding
         const filtersContainer = this.kanbanElement.querySelector('.kanban-filters-container');
         if (!filtersContainer) {
-            console.warn('Cannot bind events: filters container not found for:', this.kanbanId);
             return;
         }
         
@@ -146,7 +135,7 @@ class KanbanFilters {
                 }
             });
         } else {
-            console.warn('Search input not found:', `search-${this.kanbanId}`);
+            // Search input not found - may not be needed
         }
 
         // Filters toggle
@@ -161,12 +150,10 @@ class KanbanFilters {
                 
                 // Prevent double events
                 if (this.toggleInProgress) {
-                    console.log('Toggle already in progress, ignoring click');
                     return;
                 }
                 
                 this.toggleInProgress = true;
-                console.log('Toggle button clicked!'); // Debug log
                 
                 const isVisible = advancedFilters.classList.contains('active');
                 
@@ -183,18 +170,11 @@ class KanbanFilters {
                 if (textSpan) textSpan.textContent = isVisible ? '📋 Filtres' : '📋 Masquer';
                 if (iconSpan) iconSpan.textContent = isVisible ? '▼' : '▲';
                 
-                console.log('Filters panel visibility:', !isVisible); // Debug log
-                console.log('Advanced filters element:', advancedFilters); // Debug log
-                console.log('Advanced filters classes:', advancedFilters.className); // Debug log
-                console.log('Advanced filters computed display:', window.getComputedStyle(advancedFilters).display); // Debug log
-                
                 // Reset flag after a short delay
                 setTimeout(() => {
                     this.toggleInProgress = false;
                 }, 100);
             });
-        } else {
-            console.warn('Filters toggle button not found:', `toggle-filters-${this.kanbanId}`);
         }
 
         // Clear filters
@@ -222,7 +202,6 @@ class KanbanFilters {
                 
                 // Prevent multiple clicks during processing
                 if (sortInProgress) {
-                    console.log('Sort already in progress, ignoring click');
                     return;
                 }
                 
@@ -230,8 +209,6 @@ class KanbanFilters {
                 
                 // CRITICAL: Save the state BEFORE any async operations
                 const wasActiveBeforeClick = button.classList.contains('active');
-                
-                console.log('Button clicked:', sortType, 'Currently active:', wasActiveBeforeClick); // Debug
                 
                 sortInProgress = true;
                 
@@ -241,18 +218,15 @@ class KanbanFilters {
                         button.classList.remove('active');
                         this.clearSortHighlights(true); // Hide status when deactivating
                         this.showSortingResults('Tri désactivé', 0);
-                        console.log('Sort deactivated for:', sortType);
                     } else {
                         // Remove active class from all other buttons first
                         sortButtons.forEach(btn => btn.classList.remove('active'));
                         
                         // Activate clicked button immediately
                         button.classList.add('active');
-                        console.log('Applying sort for:', sortType);
                         
                         // Apply sorting - even if this takes time, button state is already set
                         await this.applySorting(sortType);
-                        console.log('Sort completed for:', sortType);
                     }
                 } catch (error) {
                     console.error('Error in sort button handler:', error);
@@ -784,28 +758,31 @@ class KanbanFilters {
         const cardPromises = cardsToCheck.map(async (card) => {
             let commentCount = 0;
             
+            console.log('🔍 Checking card:', card.id, 'for comments'); // Debug
+            
             // First try embedded comment data (fastest)
             if (card.comments && Array.isArray(card.comments)) {
                 commentCount = card.comments.length;
+                console.log('📝 Card', card.id, 'has embedded comments:', commentCount); // Debug
             } else if (card.comment_count) {
                 commentCount = parseInt(card.comment_count) || 0;
+                console.log('📊 Card', card.id, 'has comment_count:', commentCount); // Debug
             } else if (card.commentCount) {
                 commentCount = parseInt(card.commentCount) || 0;
+                console.log('📊 Card', card.id, 'has commentCount:', commentCount); // Debug
             } else {
-                // Only check API if card might have comments
-                const cardElement = document.getElementById(card.id);
-                const hasDiscussionIndicator = cardElement && cardElement.querySelector('.discussion-count');
-                
-                if (hasDiscussionIndicator) {
-                    // Use discussions API to get comment count
-                    if (window.KanbanDiscussions && window.KanbanDiscussions.getDiscussionCount) {
-                        try {
-                            commentCount = await window.KanbanDiscussions.getDiscussionCount(pageId, card.id);
-                        } catch (error) {
-                            console.log('highlightMostCommented: API error for card:', card.id, error);
-                            commentCount = 0;
-                        }
+                // Always check API for comments since we need the data for sorting
+                if (window.KanbanDiscussions && window.KanbanDiscussions.getDiscussionCount) {
+                    try {
+                        console.log('🌐 Calling API for card', card.id); // Debug
+                        commentCount = await window.KanbanDiscussions.getDiscussionCount(pageId, card.id);
+                        console.log('✅ API returned', commentCount, 'for card', card.id); // Debug
+                    } catch (error) {
+                        console.log('❌ API error for card:', card.id, error);
+                        commentCount = 0;
                     }
+                } else {
+                    console.log('⚠️ KanbanDiscussions API not available'); // Debug
                 }
             }
             
@@ -878,19 +855,17 @@ class KanbanFilters {
             } else if (card.lastComment) {
                 mostRecentDate = card.lastComment.date || card.lastComment;
             } else {
-                // Only use API as fallback and only if we think there might be comments
-                // Check if card has discussion indicator
-                const cardElement = document.getElementById(card.id);
-                const hasDiscussionIndicator = cardElement && cardElement.querySelector('.discussion-count');
-                
-                if (hasDiscussionIndicator || card.comment_count > 0) {
+                // Always check API for comments since we need the data for sorting
+                if (window.KanbanDiscussions && window.KanbanDiscussions.getDiscussionCount) {
                     try {
                         // Use lightweight check first - just get the count
                         const discussionCount = await window.KanbanDiscussions.getDiscussionCount(pageId, card.id);
+                        console.log('🌐 API discussion count for card', card.id, '=', discussionCount); // Debug
                         
                         if (discussionCount > 0) {
                             // Only load full discussions if there are actually comments
                             const discussions = await window.KanbanDiscussions.loadCardDiscussions(pageId, card.id);
+                            console.log('💬 Loaded discussions for card', card.id, ':', discussions); // Debug
                             
                             if (discussions && discussions.length > 0) {
                                 const sortedDiscussions = discussions
@@ -903,11 +878,12 @@ class KanbanFilters {
                                 
                                 if (sortedDiscussions.length > 0) {
                                     mostRecentDate = sortedDiscussions[0].timestamp || sortedDiscussions[0].date;
+                                    console.log('📅 Most recent date for card', card.id, ':', mostRecentDate); // Debug
                                 }
                             }
                         }
                     } catch (error) {
-                        console.log('highlightLastCommented: Error getting discussions for card:', card.id, error);
+                        console.log('❌ Error getting discussions for card:', card.id, error);
                     }
                 }
             }

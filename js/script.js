@@ -749,7 +749,6 @@
             
             // Check if filters instance already exists to avoid double initialization
             if (window.kanbanFiltersInstances && window.kanbanFiltersInstances[boardId]) {
-                console.log('Filters already initialized for:', boardId);
                 return;
             }
             
@@ -769,7 +768,6 @@
                 initAttempts++;
                 const filtersContainer = board.querySelector('.kanban-filters-container');
                 if (filtersContainer) {
-                    console.log('Initializing filters for board:', boardId, 'after', initAttempts, 'attempts');
                     const filtersInstance = new window.KanbanFilters(boardId);
                     filtersInstance.initialize();
                     
@@ -779,7 +777,6 @@
                     // Container not ready yet, try again
                     setTimeout(initializeFiltersWhenReady, 200);
                 } else {
-                    console.error('Failed to initialize filters for board:', boardId, 'after', maxAttempts, 'attempts');
                     // Remove the 'initializing' marker on failure
                     delete window.kanbanFiltersInstances[boardId];
                 }
@@ -787,8 +784,6 @@
             
             // Start checking for filters container
             setTimeout(initializeFiltersWhenReady, 100);
-        } else {
-            console.warn('KanbanFilters module not available');
         }
         
         if (board.dataset.sortable === 'true') {
