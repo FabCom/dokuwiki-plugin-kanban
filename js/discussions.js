@@ -33,6 +33,38 @@
     // Configuration
     const DISCUSSION_PREFIX = 'discussion:';
     const CARD_DISCUSSION_SUFFIX = ':card_';
+    const CACHE_DURATION = 60000; // 1 minute
+    const BATCH_CACHE_DURATION = 120000; // 2 minutes pour les batch
+    
+    // Cache pour les discussions
+    const discussionCache = new Map();
+    const discussionCountCache = new Map();
+    const batchCountCache = new Map();
+
+    /**
+     * Cache helpers
+     */
+    function getCacheKey(pageId, cardId, type = 'discussions') {
+        return `${type}:${pageId}:${cardId}`;
+    }
+
+    function isCacheValid(cacheEntry, duration = CACHE_DURATION) {
+        return cacheEntry && (Date.now() - cacheEntry.timestamp < duration);
+    }
+
+    function setCacheEntry(key, data, timestamp = Date.now()) {
+        const cache = key.startsWith('discussions:') ? discussionCache : 
+                     key.startsWith('count:') ? discussionCountCache : 
+                     batchCountCache;
+        cache.set(key, { data, timestamp });
+    }
+
+    function getCacheEntry(key) {
+        const cache = key.startsWith('discussions:') ? discussionCache : 
+                     key.startsWith('count:') ? discussionCountCache : 
+                     batchCountCache;
+        return cache.get(key);
+    }
 
     /**
      * Génère le nom de la page de discussion pour une carte
@@ -65,12 +97,20 @@
     }
 
     /**
-     * Charge les discussions d'une carte depuis DokuWiki
+     * Charge les discussions d'une carte depuis DokuWiki (avec cache)
      * @param {string} pageId - ID de la page kanban
      * @param {string} cardId - ID de la carte
      * @returns {Promise<Array>} - Liste des messages de discussion
      */
     async function loadCardDiscussions(pageId, cardId) {
+        const cacheKey = getCacheKey(pageId, cardId, 'discussions');
+        const cached = getCacheEntry(cacheKey);
+        
+        // Vérifier le cache
+        if (isCacheValid(cached)) {
+            return cached.data;
+        }
+        
         try {
             const discussionPageId = getCardDiscussionPageId(pageId, cardId);
             
@@ -97,7 +137,12 @@
 
             const responseText = await response.text();            
             const data = JSON.parse(responseText);
-            return data.discussions || [];
+            const discussions = data.discussions || [];
+            
+            // Mettre en cache
+            setCacheEntry(cacheKey, discussions);
+            
+            return discussions;
             
         } catch (error) {
             console.error('Erreur chargement discussions:', error);
@@ -150,6 +195,16 @@
             
             try {
                 const result = JSON.parse(responseText);
+                if (result.success === true) {
+                    // Invalider le cache pour cette carte
+                    invalidateCardCache(pageId, cardId);
+                    
+                    // Mettre à jour le cache avec les nouvelles données
+                    const discussionCacheKey = getCacheKey(pageId, cardId, 'discussions');
+                    const countCacheKey = getCacheKey(pageId, cardId, 'count');
+                    setCacheEntry(discussionCacheKey, discussions);
+                    setCacheEntry(countCacheKey, discussions.length);
+                }
                 return result.success === true;
             } catch (e) {
                 console.error('JSON parse error:', e, 'Response:', responseText);
@@ -264,18 +319,106 @@
     }
 
     /**
-     * Compte le nombre de messages de discussion pour une carte
+     * Compte le nombre de messages de discussion pour une carte (avec cache)
      * @param {string} pageId - ID de la page kanban
      * @param {string} cardId - ID de la carte
      * @returns {Promise<number>} - Nombre de messages
      */
     async function getDiscussionCount(pageId, cardId) {
+        const cacheKey = getCacheKey(pageId, cardId, 'count');
+        const cached = getCacheEntry(cacheKey);
+        
+        // Vérifier le cache
+        if (isCacheValid(cached)) {
+            return cached.data;
+        }
+        
         try {
             const discussions = await loadCardDiscussions(pageId, cardId);
-            return discussions.length;
+            const count = discussions.length;
+            
+            // Mettre en cache
+            setCacheEntry(cacheKey, count);
+            
+            return count;
         } catch (error) {
             console.error('Erreur comptage discussions:', error);
             return 0;
+        }
+    }
+
+    /**
+     * Charge les comptes de discussion pour plusieurs cartes en batch (optimisé pour les tris)
+     * @param {string} pageId - ID de la page kanban
+     * @param {Array<string>} cardIds - Liste des IDs de cartes
+     * @returns {Promise<Object>} - Objet avec cardId -> count
+     */
+    async function getBatchDiscussionCounts(pageId, cardIds) {
+        const batchKey = `batch:${pageId}:${cardIds.sort().join(',')}`;
+        const cached = getCacheEntry(batchKey);
+        
+        // Vérifier le cache batch
+        if (isCacheValid(cached, BATCH_CACHE_DURATION)) {
+            return cached.data;
+        }
+        
+        const results = {};
+        const uncachedCards = [];
+        
+        // Vérifier le cache individuel pour chaque carte
+        for (const cardId of cardIds) {
+            const cacheKey = getCacheKey(pageId, cardId, 'count');
+            const cached = getCacheEntry(cacheKey);
+            
+            if (isCacheValid(cached)) {
+                results[cardId] = cached.data;
+            } else {
+                uncachedCards.push(cardId);
+            }
+        }
+        
+        // Charger les cartes non mises en cache
+        if (uncachedCards.length > 0) {
+            console.log(`🔄 Batch loading discussions for ${uncachedCards.length} cards`);
+            
+            // Charger en parallèle avec limitation
+            const batchSize = 5; // Limiter à 5 appels parallèles
+            for (let i = 0; i < uncachedCards.length; i += batchSize) {
+                const batch = uncachedCards.slice(i, i + batchSize);
+                const promises = batch.map(async (cardId) => {
+                    const count = await getDiscussionCount(pageId, cardId);
+                    results[cardId] = count;
+                    return { cardId, count };
+                });
+                
+                await Promise.all(promises);
+            }
+        }
+        
+        // Mettre en cache le batch complet
+        setCacheEntry(batchKey, results);
+        
+        console.log(`✅ Batch discussion counts loaded:`, results);
+        return results;
+    }
+
+    /**
+     * Invalide le cache pour une carte spécifique (à appeler lors des modifications)
+     * @param {string} pageId - ID de la page kanban
+     * @param {string} cardId - ID de la carte
+     */
+    function invalidateCardCache(pageId, cardId) {
+        const discussionCacheKey = getCacheKey(pageId, cardId, 'discussions');
+        const countCacheKey = getCacheKey(pageId, cardId, 'count');
+        
+        discussionCache.delete(discussionCacheKey);
+        discussionCountCache.delete(countCacheKey);
+        
+        // Invalider les caches batch qui contiennent cette carte
+        for (const [key, value] of batchCountCache.entries()) {
+            if (key.includes(pageId) && value.data[cardId] !== undefined) {
+                batchCountCache.delete(key);
+            }
         }
     }
 
@@ -343,6 +486,8 @@
         formatDiscussionMessage,
         getCardDiscussionPageId,
         getDiscussionCount,
+        getBatchDiscussionCounts,
+        invalidateCardCache,
         updateCardDiscussionIndicator,
         updateAllDiscussionIndicators
     };

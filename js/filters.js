@@ -733,7 +733,7 @@ class KanbanFilters {
     }
 
     /**
-     * Highlight the top 3 most commented cards (optimized version)
+     * Highlight the top 3 most commented cards (optimized avec batch loading)
      */
     async highlightMostCommented() {
         if (!this.originalData || !this.originalData.columns) return;
@@ -744,46 +744,45 @@ class KanbanFilters {
         const pageId = window.JSINFO?.id || 'playground:kanban';
         console.log('highlightMostCommented: Page ID =', pageId); // Debug
         
-        // Collect all cards with their comment counts using parallel processing
+        // Collect all cards IDs for batch loading
         const cardsToCheck = [];
+        const cardIds = [];
         this.originalData.columns.forEach(column => {
             if (column.cards) {
                 column.cards.forEach(card => {
                     cardsToCheck.push(card);
+                    cardIds.push(card.id);
                 });
             }
         });
         
-        // Use Promise.all to check all cards in parallel
-        const cardPromises = cardsToCheck.map(async (card) => {
+        console.log('📦 Batch loading discussions for', cardIds.length, 'cards...'); // Debug
+        
+        // Use batch loading for better performance
+        let batchCounts = {};
+        if (window.KanbanDiscussions && window.KanbanDiscussions.getBatchDiscussionCounts) {
+            try {
+                batchCounts = await window.KanbanDiscussions.getBatchDiscussionCounts(pageId, cardIds);
+                console.log('✅ Batch loading completed:', batchCounts); // Debug
+            } catch (error) {
+                console.log('❌ Batch loading failed, falling back to individual calls:', error);
+            }
+        }
+        
+        // Process cards with comment counts
+        const cardsWithComments = cardsToCheck.map(card => {
             let commentCount = 0;
-            
-            console.log('🔍 Checking card:', card.id, 'for comments'); // Debug
             
             // First try embedded comment data (fastest)
             if (card.comments && Array.isArray(card.comments)) {
                 commentCount = card.comments.length;
-                console.log('📝 Card', card.id, 'has embedded comments:', commentCount); // Debug
             } else if (card.comment_count) {
                 commentCount = parseInt(card.comment_count) || 0;
-                console.log('📊 Card', card.id, 'has comment_count:', commentCount); // Debug
             } else if (card.commentCount) {
                 commentCount = parseInt(card.commentCount) || 0;
-                console.log('📊 Card', card.id, 'has commentCount:', commentCount); // Debug
-            } else {
-                // Always check API for comments since we need the data for sorting
-                if (window.KanbanDiscussions && window.KanbanDiscussions.getDiscussionCount) {
-                    try {
-                        console.log('🌐 Calling API for card', card.id); // Debug
-                        commentCount = await window.KanbanDiscussions.getDiscussionCount(pageId, card.id);
-                        console.log('✅ API returned', commentCount, 'for card', card.id); // Debug
-                    } catch (error) {
-                        console.log('❌ API error for card:', card.id, error);
-                        commentCount = 0;
-                    }
-                } else {
-                    console.log('⚠️ KanbanDiscussions API not available'); // Debug
-                }
+            } else if (batchCounts[card.id] !== undefined) {
+                // Use batch-loaded count
+                commentCount = batchCounts[card.id];
             }
             
             return { 
@@ -792,8 +791,6 @@ class KanbanFilters {
             };
         });
 
-        // Wait for all card checks to complete
-        const cardsWithComments = await Promise.all(cardPromises);
         console.log('highlightMostCommented: Results =', cardsWithComments); // Debug
 
         // Sort by comment count (descending) and take top 3
@@ -813,8 +810,10 @@ class KanbanFilters {
         });
 
         this.showSortingResults(`Top 3 cartes les plus commentées`, top3.length);
-    }    /**
-     * Highlight the last commented card (optimized version)
+    }
+
+    /**
+     * Highlight the last commented card (optimized avec batch loading)
      */
     async highlightLastCommented() {
         if (!this.originalData || !this.originalData.columns) return;
@@ -827,13 +826,17 @@ class KanbanFilters {
 
         // Create array of cards to check
         const cardsToCheck = [];
+        const cardIds = [];
         this.originalData.columns.forEach(column => {
             if (column.cards) {
                 column.cards.forEach(card => {
                     cardsToCheck.push(card);
+                    cardIds.push(card.id);
                 });
             }
         });
+
+        console.log('🕒 Checking last commented card for', cardIds.length, 'cards...'); // Debug
 
         // Use Promise.all to check all cards in parallel for better performance
         const cardPromises = cardsToCheck.map(async (card) => {
@@ -855,7 +858,7 @@ class KanbanFilters {
             } else if (card.lastComment) {
                 mostRecentDate = card.lastComment.date || card.lastComment;
             } else {
-                // Always check API for comments since we need the data for sorting
+                // Use cached discussions API (cache is handled in discussions.js)
                 if (window.KanbanDiscussions && window.KanbanDiscussions.getDiscussionCount) {
                     try {
                         // Use lightweight check first - just get the count
