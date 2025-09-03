@@ -182,6 +182,12 @@
             html += `<span class="kanban-content-indicator kanban-tooltip" title="${internalLinksCount} lien${internalLinksCount > 1 ? 's' : ''} interne${internalLinksCount > 1 ? 's' : ''}">🔗 ${internalLinksCount}</span>`;
         }
         
+        // Liens externes (icône + nombre)
+        const externalLinksCount = (cardData.externalLinks && cardData.externalLinks.length) || 0;
+        if (externalLinksCount > 0) {
+            html += `<span class="kanban-content-indicator kanban-tooltip" title="${externalLinksCount} lien${externalLinksCount > 1 ? 's' : ''} externe${externalLinksCount > 1 ? 's' : ''}">🌐 ${externalLinksCount}</span>`;
+        }
+        
         // Médias (préparé pour implémentation future)
         const mediaCount = (cardData.media && cardData.media.length) || 0;
         if (mediaCount > 0) {

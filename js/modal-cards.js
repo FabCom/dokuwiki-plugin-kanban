@@ -59,6 +59,19 @@
             }
             updatedData.internalLinks = internalLinks;
             
+            // Extract external links from form
+            const externalLinksList = modal.querySelector('#external-links-list-inline');
+            const externalLinks = [];
+            if (externalLinksList) {
+                externalLinksList.querySelectorAll('.external-link-item').forEach(item => {
+                    externalLinks.push({
+                        url: item.dataset.url,
+                        text: item.dataset.text || ''
+                    });
+                });
+            }
+            updatedData.externalLinks = externalLinks;
+            
             // Keep existing media attachments
             if (cardData.media) {
                 updatedData.media = cardData.media;
@@ -103,7 +116,21 @@
                     }
                 });
             });
-        }        // Bind remove link buttons
+        }
+
+        // Bind add external link button
+        const addExternalLinkBtn = modal.querySelector('#add-external-link');
+        if (addExternalLinkBtn) {
+            addExternalLinkBtn.addEventListener('click', () => {
+                showExternalLinkModal((url, title) => {
+                    if (url) {
+                        addExternalLinkToCard(modal, url, title);
+                    }
+                });
+            });
+        }
+
+        // Bind remove link buttons
         bindRemoveLinkButtons(modal);
         
         // Bind remove media buttons
@@ -218,6 +245,19 @@
                     </div>
                     
                     <div class="form-group">
+                        <label>🌐 Liens externes</label>
+                        <div class="external-links-section-inline">
+                            <div class="section-header-inline">
+                                <span id="external-links-count">${cardData.externalLinks ? cardData.externalLinks.length : 0} lien(s) externe(s)</span>
+                                <button type="button" class="kanban-btn-small" id="add-external-link">+ Ajouter un lien</button>
+                            </div>
+                            <div id="external-links-list-inline" class="external-links-list">
+                                ${createExternalLinksListHTML(cardData.externalLinks || [])}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
                         <label>📎 Médias attachés</label>
                         <div class="media-section-inline">
                             <div class="section-header-inline">
@@ -250,6 +290,26 @@
                     ${link.text ? `<div class="link-text">${escapeHtml(link.text)}</div>` : ''}
                 </div>
                 <button type="button" class="remove-link-btn" title="Supprimer">×</button>
+            </div>
+        `).join('');
+    }
+
+    /**
+     * Create external links list HTML
+     */
+    function createExternalLinksListHTML(externalLinks) {
+        if (!externalLinks || externalLinks.length === 0) {
+            return '<p class="no-links-message">Aucun lien externe ajouté</p>';
+        }
+
+        const escapeHtml = window.KanbanModalCore.escapeHtml;
+        return externalLinks.map(link => `
+            <div class="external-link-item" data-url="${escapeHtml(link.url)}" data-text="${escapeHtml(link.text || '')}">
+                <div class="link-info">
+                    <div class="link-url">🌐 ${escapeHtml(link.url)}</div>
+                    ${link.text ? `<div class="link-text">${escapeHtml(link.text)}</div>` : ''}
+                </div>
+                <button type="button" class="remove-external-link-btn" title="Supprimer">×</button>
             </div>
         `).join('');
     }
@@ -411,6 +471,24 @@
                     </div>
                 </div>
                 
+                <!-- Liens externes -->
+                <div class="view-group">
+                    <label>🌐 Liens externes</label>
+                    <div class="view-content">
+                        ${cardData.externalLinks && cardData.externalLinks.length > 0 ? 
+                            cardData.externalLinks.map(link => 
+                                `<div class="external-link-item">
+                                    <a href="${escapeHtml(link.url)}" target="_blank" class="external-link-readonly" title="Ouvrir ${escapeHtml(link.text || link.url)}">
+                                        🌐 ${escapeHtml(link.text || link.url)}
+                                    </a>
+                                    ${link.url !== (link.text || link.url) ? `<small class="link-target">(${escapeHtml(link.url)})</small>` : ''}
+                                </div>`
+                            ).join('') 
+                            : '<em>Aucun lien externe</em>'
+                        }
+                    </div>
+                </div>
+                
                 <!-- Médias attachés -->
                 <div class="view-group">
                     <label>📎 Médias attachés</label>
@@ -520,14 +598,29 @@
      * Bind remove link buttons
      */
     function bindRemoveLinkButtons(modal) {
-        const linksList = modal.querySelector('#internal-links-list-inline');
-        if (linksList) {
-            linksList.querySelectorAll('.remove-link-btn').forEach(btn => {
+        // Handle internal links removal
+        const internalLinksList = modal.querySelector('#internal-links-list-inline');
+        if (internalLinksList) {
+            internalLinksList.querySelectorAll('.remove-link-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     btn.closest('.internal-link-item').remove();
                     updateInternalLinksCount(modal);
-                    if (linksList.children.length === 0) {
-                        linksList.innerHTML = '<p class="no-links-message">Aucun lien interne ajouté</p>';
+                    if (internalLinksList.children.length === 0) {
+                        internalLinksList.innerHTML = '<p class="no-links-message">Aucun lien interne ajouté</p>';
+                    }
+                });
+            });
+        }
+
+        // Handle external links removal
+        const externalLinksList = modal.querySelector('#external-links-list-inline');
+        if (externalLinksList) {
+            externalLinksList.querySelectorAll('.remove-external-link-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    btn.closest('.external-link-item').remove();
+                    updateExternalLinksCount(modal);
+                    if (externalLinksList.children.length === 0) {
+                        externalLinksList.innerHTML = '<p class="no-links-message">Aucun lien externe ajouté</p>';
                     }
                 });
             });
@@ -543,6 +636,124 @@
         if (countSpan && linksList) {
             const count = linksList.querySelectorAll('.internal-link-item').length;
             countSpan.textContent = `${count} lien(s) interne(s)`;
+        }
+    }
+
+    /**
+     * Show external link input modal
+     */
+    function showExternalLinkModal(callback) {
+        const modal = window.KanbanModalCore.createModal('kanban-external-link-modal', 'Ajouter un lien externe');
+        
+        const form = `
+            <form id="external-link-form">
+                <div class="form-group">
+                    <label for="external-url">URL *</label>
+                    <input type="url" id="external-url" name="url" required 
+                           placeholder="https://example.com" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="external-title">Titre (optionnel)</label>
+                    <input type="text" id="external-title" name="title" 
+                           placeholder="Titre du lien" class="form-control">
+                </div>
+            </form>
+        `;
+        
+        modal.querySelector('.kanban-modal-body').innerHTML = form;
+
+        // Add footer
+        const footer = document.createElement('div');
+        footer.className = 'kanban-modal-footer';
+        footer.innerHTML = `
+            <button type="submit" class="kanban-btn kanban-btn-primary" form="external-link-form">✅ Ajouter</button>
+            <button type="button" class="kanban-btn kanban-btn-secondary kanban-modal-cancel">❌ Annuler</button>
+        `;
+        
+        const innerModal = modal.querySelector('.kanban-modal');
+        innerModal.appendChild(footer);
+
+        // Bind form submission
+        const formElement = modal.querySelector('#external-link-form');
+        formElement.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(formElement);
+            const url = formData.get('url');
+            const title = formData.get('title');
+            
+            if (url) {
+                callback(url, title);
+                window.KanbanModalCore.closeModal(modal);
+            }
+        });
+
+        // Bind cancel button
+        modal.querySelector('.kanban-modal-cancel').addEventListener('click', () => {
+            window.KanbanModalCore.closeModal(modal);
+        });
+
+        // Focus on URL input
+        setTimeout(() => {
+            const urlInput = modal.querySelector('#external-url');
+            if (urlInput) urlInput.focus();
+        }, 100);
+    }
+
+    /**
+     * Add external link to card
+     */
+    function addExternalLinkToCard(modal, url, title) {
+        const linksList = modal.querySelector('#external-links-list-inline');
+        const noLinksMessage = linksList.querySelector('.no-links-message');
+        
+        if (noLinksMessage) {
+            noLinksMessage.remove();
+        }
+        
+        // Check if link already exists
+        const existingLinks = linksList.querySelectorAll('.external-link-item');
+        for (let item of existingLinks) {
+            if (item.dataset.url === url) {
+                // Link already exists, don't add duplicate
+                return;
+            }
+        }
+        
+        const escapeHtml = window.KanbanModalCore.escapeHtml;
+        const linkItem = document.createElement('div');
+        linkItem.className = 'external-link-item';
+        linkItem.innerHTML = `
+            <div class="link-info">
+                <div class="link-url">🌐 ${escapeHtml(url)}</div>
+                ${title ? `<div class="link-text">${escapeHtml(title)}</div>` : ''}
+            </div>
+            <button type="button" class="remove-external-link-btn" title="Supprimer">×</button>`;
+        
+        linkItem.dataset.url = url;
+        linkItem.dataset.title = title || '';
+        
+        // Bind remove button
+        linkItem.querySelector('.remove-external-link-btn').addEventListener('click', () => {
+            linkItem.remove();
+            updateExternalLinksCount(modal);
+            if (linksList.children.length === 0) {
+                linksList.innerHTML = '<p class="no-links-message">Aucun lien externe ajouté</p>';
+            }
+        });
+        
+        linksList.appendChild(linkItem);
+        updateExternalLinksCount(modal);
+    }
+
+    /**
+     * Update external links count display
+     */
+    function updateExternalLinksCount(modal) {
+        const countSpan = modal.querySelector('#external-links-count');
+        const linksList = modal.querySelector('#external-links-list-inline');
+        if (countSpan && linksList) {
+            const count = linksList.querySelectorAll('.external-link-item').length;
+            countSpan.textContent = `${count} lien(s) externe(s)`;
         }
     }
 
@@ -1024,6 +1235,9 @@
         addInternalLinkToCard,
         bindRemoveLinkButtons,
         updateInternalLinksCount,
+        showExternalLinkModal,
+        addExternalLinkToCard,
+        updateExternalLinksCount,
         showMediaBrowserModal,
         addMediaToCard,
         updateMediaDisplay,

@@ -547,6 +547,29 @@
     margin-left: 8px;
 }
 
+/* ===== EXTERNAL LINKS IN VIEW MODAL ===== */
+.external-link-item {
+    margin-bottom: 8px;
+    padding: 8px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border-left: 3px solid #ff6b35;
+}
+
+.external-link-readonly {
+    color: #ff6b35;
+    text-decoration: none;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.external-link-readonly:hover {
+    color: #e55a2b;
+    text-decoration: underline;
+}
+
 /* ===== INTERNAL LINKS MANAGEMENT MODAL ===== */
 .kanban-internal-links-form {
     max-height: 70vh;
@@ -643,6 +666,56 @@
 }
 
 .remove-link-btn:hover {
+    background: #c82333;
+}
+
+/* ===== EXTERNAL LINKS MANAGEMENT ===== */
+.external-links-section-inline {
+    margin-bottom: 20px;
+}
+
+.external-links-list {
+    min-height: 60px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 10px;
+    background: #f8f9fa;
+}
+
+.external-link-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px;
+    margin-bottom: 8px;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    border-left: 3px solid #ff6b35;
+}
+
+.link-url {
+    font-weight: 500;
+    color: #ff6b35;
+    margin-bottom: 2px;
+    word-break: break-all;
+}
+
+.remove-external-link-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.remove-external-link-btn:hover {
     background: #c82333;
 }
 
