@@ -17,6 +17,11 @@
             document.body.removeChild(existingModal);
         }
 
+        // Calculate z-index based on existing modals (after removing duplicate)
+        const existingModals = document.querySelectorAll('.kanban-modal-overlay');
+        const baseZIndex = 10000;
+        const newZIndex = baseZIndex + (existingModals.length * 10);
+
         // Create modal structure
         const modal = document.createElement('div');
         modal.id = id;
@@ -43,11 +48,20 @@
         modal.style.display = 'flex';
         modal.style.alignItems = 'center';
         modal.style.justifyContent = 'center';
-        modal.style.zIndex = '10000';
+        modal.style.zIndex = newZIndex.toString();
 
         // Add to DOM
         document.body.appendChild(modal);
         modal.style.top = '0';
+        
+        // Reduce opacity of lower modals to show layering
+        const allModals = document.querySelectorAll('.kanban-modal-overlay');
+        allModals.forEach((existingModal, index) => {
+            if (existingModal !== modal) {
+                // Lower modals get reduced opacity
+                existingModal.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
+            }
+        });
         modal.style.left = '0';
         modal.style.width = '100%';
         modal.style.height = '100%';
@@ -100,6 +114,34 @@
     function closeModal(modal) {
         if (modal && modal.parentNode) {
             modal.parentNode.removeChild(modal);
+            
+            // Reactivate previous modal if exists
+            const remainingModals = document.querySelectorAll('.kanban-modal-overlay');
+            if (remainingModals.length > 0) {
+                // Find the modal with highest z-index (the top one)
+                let topModal = remainingModals[0];
+                let maxZIndex = parseInt(topModal.style.zIndex || '0');
+                
+                for (let i = 1; i < remainingModals.length; i++) {
+                    const currentZIndex = parseInt(remainingModals[i].style.zIndex || '0');
+                    if (currentZIndex > maxZIndex) {
+                        maxZIndex = currentZIndex;
+                        topModal = remainingModals[i];
+                    }
+                }
+                
+                // Restore full opacity to the top modal
+                topModal.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+                topModal.style.display = 'flex';
+                topModal.style.pointerEvents = 'auto';
+                
+                // Reduce opacity of other modals
+                remainingModals.forEach(existingModal => {
+                    if (existingModal !== topModal) {
+                        existingModal.style.backgroundColor = 'rgba(0, 0, 0, 0.3)';
+                    }
+                });
+            }
         }
     }
 

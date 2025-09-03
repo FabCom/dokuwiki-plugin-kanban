@@ -72,6 +72,11 @@ class action_plugin_kanban extends ActionPlugin
         
         $event->data['script'][] = [
             'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-media.js'
+        ];
+        
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-main.js'
         ];
         
