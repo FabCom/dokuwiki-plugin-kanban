@@ -562,27 +562,11 @@ class action_plugin_kanban extends ActionPlugin
     {
         $content = trim($content);
         
-        // If content is empty, return default structure
+        // If content is empty, return empty structure without default columns
         if (empty($content)) {
             return [
                 'title' => 'Kanban Board',
-                'columns' => [
-                    [
-                        'id' => uniqid('col_'),
-                        'title' => 'À faire',
-                        'cards' => []
-                    ],
-                    [
-                        'id' => uniqid('col_'),
-                        'title' => 'En cours',
-                        'cards' => []
-                    ],
-                    [
-                        'id' => uniqid('col_'),
-                        'title' => 'Terminé',
-                        'cards' => []
-                    ]
-                ]
+                'columns' => []
             ];
         }
         
@@ -590,26 +574,10 @@ class action_plugin_kanban extends ActionPlugin
         $columns = json_decode($content, true);
         
         if (json_last_error() !== JSON_ERROR_NONE) {
-            // Invalid JSON, return default structure
+            // Invalid JSON, return empty structure instead of defaults
             return [
                 'title' => 'Kanban Board',
-                'columns' => [
-                    [
-                        'id' => uniqid('col_'),
-                        'title' => 'À faire',
-                        'cards' => []
-                    ],
-                    [
-                        'id' => uniqid('col_'),
-                        'title' => 'En cours',
-                        'cards' => []
-                    ],
-                    [
-                        'id' => uniqid('col_'),
-                        'title' => 'Terminé',
-                        'cards' => []
-                    ]
-                ]
+                'columns' => []
             ];
         }
         
@@ -994,6 +962,14 @@ class action_plugin_kanban extends ActionPlugin
         
         $content = trim($matches[1]);
         
+        // Si le contenu est vide, retourner un kanban vide
+        if (empty($content)) {
+            return [
+                'title' => 'Kanban Board',
+                'columns' => []
+            ];
+        }
+        
         // Try to parse as JSON first
         $jsonData = json_decode($content, true);
         if (json_last_error() === JSON_ERROR_NONE) {
@@ -1010,15 +986,18 @@ class action_plugin_kanban extends ActionPlugin
             }
         }
         
-        // Fallback: parse as simple column list
-        $columnsArray = explode(',', $content ?: 'À faire,En cours,Terminé');
+        // Fallback: parse as simple column list (seulement si contenu non vide)
+        $columnsArray = explode(',', $content);
         $columns = array();
         foreach ($columnsArray as $columnTitle) {
-            $columns[] = array(
-                'id' => uniqid('col_'),
-                'title' => trim($columnTitle),
-                'cards' => array()
-            );
+            $title = trim($columnTitle);
+            if (!empty($title)) {
+                $columns[] = array(
+                    'id' => uniqid('col_'),
+                    'title' => $title,
+                    'cards' => array()
+                );
+            }
         }
         
         return [

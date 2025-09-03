@@ -3497,3 +3497,76 @@
         border-left: 3px solid #007bff;
     }
 }
+
+/* ================================
+   Empty State Styles
+   ================================ */
+
+.kanban-empty-state {
+    text-align: center;
+    padding: 60px 40px;
+    background: #f8f9fa;
+    border: 2px dashed #dee2e6;
+    border-radius: 12px;
+    margin: 20px auto;
+    max-width: 500px;
+    color: #6c757d;
+}
+
+.kanban-empty-icon {
+    font-size: 4rem;
+    margin-bottom: 20px;
+    opacity: 0.7;
+}
+
+.kanban-empty-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: #495057;
+}
+
+.kanban-empty-description {
+    font-size: 1rem;
+    line-height: 1.5;
+    margin-bottom: 25px;
+    color: #6c757d;
+}
+
+.kanban-empty-description strong {
+    color: #495057;
+    font-weight: 600;
+}
+
+.kanban-btn-large {
+    padding: 12px 24px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+}
+
+.kanban-btn-large:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+}
+
+/* Responsive empty state */
+@media (max-width: 768px) {
+    .kanban-empty-state {
+        padding: 40px 20px;
+        margin: 15px;
+    }
+    
+    .kanban-empty-icon {
+        font-size: 3rem;
+    }
+    
+    .kanban-empty-title {
+        font-size: 1.3rem;
+    }
+    
+    .kanban-empty-description {
+        font-size: 0.9rem;
+    }
+}

@@ -118,7 +118,7 @@ class syntax_plugin_kanban extends SyntaxPlugin
         $attributes = array(
             'id' => uniqid('kanban_'),
             'title' => 'Kanban Board',
-            'columns' => 'À faire,En cours,Terminé',
+            'columns' => '',
             'editable' => 'true',
             'sortable' => 'true'
         );
@@ -140,18 +140,9 @@ class syntax_plugin_kanban extends SyntaxPlugin
     {
         $content = trim($content);
         
-        // If content is empty, return default structure
+        // If content is empty, return empty structure
         if (empty($content)) {
-            $columnsArray = explode(',', 'À faire,En cours,Terminé');
-            $columns = array();
-            foreach ($columnsArray as $columnTitle) {
-                $columns[] = array(
-                    'id' => uniqid('col_'),
-                    'title' => trim($columnTitle),
-                    'cards' => array()
-                );
-            }
-            return $columns;
+            return [];
         }
         
         // Try to parse as JSON
@@ -167,17 +158,8 @@ class syntax_plugin_kanban extends SyntaxPlugin
             }
         }
         
-        // Fallback to default if parsing fails
-        $columnsArray = explode(',', 'À faire,En cours,Terminé');
-        $columns = array();
-        foreach ($columnsArray as $columnTitle) {
-            $columns[] = array(
-                'id' => uniqid('col_'),
-                'title' => trim($columnTitle),
-                'cards' => array()
-            );
-        }
-        return $columns;
+        // Fallback to empty structure if parsing fails
+        return [];
     }
 
     /**

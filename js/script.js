@@ -69,20 +69,53 @@
         
         html += `</div><div class="kanban-columns">`;
         
-        // Render columns
-        boardData.columns.forEach((column, index) => {
-            html += renderColumn(column, index, boardContainer.dataset.editable === 'true');
-        });
+        // Vérifier si le kanban est vide
+        if (!boardData.columns || boardData.columns.length === 0) {
+            // Affichage pour kanban vide
+            if (boardContainer.dataset.editable === 'true') {
+                html += `
+                    <div class="kanban-empty-state">
+                        <div class="kanban-empty-icon">📋</div>
+                        <h3 class="kanban-empty-title">Tableau kanban vide</h3>
+                        <p class="kanban-empty-description">
+                            Ce tableau kanban ne contient encore aucune colonne.<br>
+                            Cliquez sur <strong>"Ajouter Colonne"</strong> pour commencer à organiser vos tâches.
+                        </p>
+                        <button class="kanban-btn kanban-btn-primary kanban-btn-large" onclick="window.KanbanPlugin.addColumn('${boardContainer.id}')">
+                            ➕ Créer ma première colonne
+                        </button>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div class="kanban-empty-state">
+                        <div class="kanban-empty-icon">📋</div>
+                        <h3 class="kanban-empty-title">Tableau kanban vide</h3>
+                        <p class="kanban-empty-description">
+                            Ce tableau kanban ne contient encore aucune colonne.<br>
+                            Contactez l'administrateur pour ajouter du contenu.
+                        </p>
+                    </div>
+                `;
+            }
+        } else {
+            // Render columns normalement
+            boardData.columns.forEach((column, index) => {
+                html += renderColumn(column, index, boardContainer.dataset.editable === 'true');
+            });
+        }
         
         html += `</div>`;
         
         contentContainer.innerHTML = html;
         contentContainer.removeAttribute('data-loading');
         
-        // Charger les indicateurs de discussion de façon asynchrone
-        setTimeout(() => {
-            initializeDiscussionIndicators(boardContainer);
-        }, 100);
+        // Charger les indicateurs de discussion de façon asynchrone (seulement si il y a des cartes)
+        if (boardData.columns && boardData.columns.length > 0) {
+            setTimeout(() => {
+                initializeDiscussionIndicators(boardContainer);
+            }, 100);
+        }
     }
 
     /**
