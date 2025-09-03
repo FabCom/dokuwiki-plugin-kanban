@@ -88,6 +88,9 @@ class KanbanAjaxHandler
                 case 'clear_cache':
                     $this->clearCache();
                     break;
+                case 'force_unlock':
+                    $this->forceUnlockBoard();
+                    break;
                 default:
                     KanbanErrorManager::sendResponse(false, 'Action non reconnue', [], 'UNKNOWN_ACTION', 400);
             }
@@ -234,8 +237,16 @@ class KanbanAjaxHandler
                 'expires_at' => $result['expires_at'] ?? null
             ]);
         } else {
-            KanbanErrorManager::sendResponse(false, $result['error'], [
-                'locked' => true
+            $errorMessage = $result['error'] ?? 'Erreur de verrouillage inconnue';
+            KanbanErrorManager::logWarning('Lock acquisition failed', [
+                'page_id' => $pageId,
+                'user' => $currentUser,
+                'result' => $result
+            ]);
+            
+            KanbanErrorManager::sendResponse(false, $errorMessage, [
+                'locked' => true,
+                'locked_by' => $result['locked_by'] ?? null
             ], 'LOCK_CONFLICT', 409);
         }
     }
@@ -351,21 +362,132 @@ class KanbanAjaxHandler
     }
     
     /**
-     * Get card discussions (placeholder)
+     * Get card discussions
      */
     private function getCardDiscussions() {
-        // TODO: Implement card discussions functionality
-        KanbanErrorManager::sendResponse(true, 'Discussions récupérées', [
-            'discussions' => []
-        ]);
+        global $INPUT;
+        
+        $pageId = $INPUT->str('id');
+        
+        if (empty($pageId)) {
+            KanbanErrorManager::sendValidationError('id', 'Discussion page ID required');
+            return;
+        }
+        
+        // Check if page exists and get content
+        if (!page_exists($pageId)) {
+            // Return empty discussions if page doesn't exist yet
+            KanbanErrorManager::sendResponse(true, 'Discussions récupérées', [
+                'discussions' => []
+            ]);
+            return;
+        }
+        
+        // Get page content
+        $pageContent = rawWiki($pageId);
+        
+        try {
+            // Parse JSON content
+            $discussions = [];
+            if (!empty($pageContent)) {
+                $decoded = json_decode($pageContent, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    // Le format stocké contient {messages: [...]} - extraire les messages
+                    if (isset($decoded['messages']) && is_array($decoded['messages'])) {
+                        $discussions = $decoded['messages'];
+                    } else if (is_array($decoded)) {
+                        // Ancien format : tableau direct
+                        $discussions = $decoded;
+                    }
+                }
+            }
+            
+            KanbanErrorManager::sendResponse(true, 'Discussions récupérées', [
+                'discussions' => $discussions
+            ]);
+            
+        } catch (Exception $e) {
+            KanbanErrorManager::logError('Error loading discussions', [
+                'page_id' => $pageId,
+                'error' => $e->getMessage()
+            ]);
+            KanbanErrorManager::sendServerError('Erreur lors du chargement des discussions');
+        }
     }
     
     /**
-     * Save card discussions (placeholder)
+     * Save card discussions
      */
     private function saveCardDiscussions() {
-        // TODO: Implement card discussions functionality
-        KanbanErrorManager::sendResponse(true, 'Discussions sauvegardées');
+        global $INPUT;
+        
+        $pageId = $INPUT->str('id');
+        $data = $INPUT->str('data');
+        
+        if (empty($pageId)) {
+            KanbanErrorManager::sendValidationError('id', 'Discussion page ID required');
+            return;
+        }
+        
+        if (empty($data)) {
+            KanbanErrorManager::sendValidationError('data', 'Discussion data required');
+            return;
+        }
+        
+        // Check permissions - use canEdit instead of canWrite
+        if (!KanbanAuthManager::canEdit($pageId)) {
+            KanbanErrorManager::sendResponse(false, 'Permission refusée', [], 'ACCESS_DENIED', 403);
+            return;
+        }
+        
+        try {
+            // Validate JSON data
+            $inputData = json_decode($data, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                KanbanErrorManager::sendValidationError('data', 'Invalid JSON format');
+                return;
+            }
+            
+            // Le format attendu est celui généré par le JavaScript : 
+            // {cardId: '', pageId: '', lastUpdate: '', messages: [...]}
+            if (isset($inputData['messages']) && is_array($inputData['messages'])) {
+                // Format complet avec métadonnées
+                $discussionData = $inputData;
+            } else if (is_array($inputData)) {
+                // Format ancien : tableau direct de messages - créer la structure complète
+                $discussionData = [
+                    'cardId' => basename($pageId), // Extraire l'ID de la carte du nom de page
+                    'pageId' => str_replace('discussion:', '', str_replace(':card_', ':', $pageId)),
+                    'lastUpdate' => date('c'),
+                    'messages' => $inputData,
+                    'lastSavedBy' => KanbanAuthManager::getCurrentUser(),
+                    'lastSavedAt' => date('c')
+                ];
+            } else {
+                KanbanErrorManager::sendValidationError('data', 'Invalid data format');
+                return;
+            }
+            
+            // Save to DokuWiki page
+            $summary = 'Mise à jour des discussions de carte';
+            
+            // Use DokuWiki's saveWikiText function - it doesn't return a value
+            saveWikiText($pageId, json_encode($discussionData, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), $summary);
+            
+            // Check if the save was successful by verifying the page exists and has content
+            if (page_exists($pageId)) {
+                KanbanErrorManager::sendResponse(true, 'Discussions sauvegardées');
+            } else {
+                KanbanErrorManager::sendServerError('Erreur lors de la sauvegarde des discussions');
+            }
+            
+        } catch (Exception $e) {
+            KanbanErrorManager::logError('Error saving discussions', [
+                'page_id' => $pageId,
+                'error' => $e->getMessage()
+            ]);
+            KanbanErrorManager::sendServerError('Erreur lors de la sauvegarde des discussions');
+        }
     }
     
     /**
@@ -442,5 +564,36 @@ class KanbanAjaxHandler
         
         $this->cacheManager->clearAllCaches();
         KanbanErrorManager::sendResponse(true, 'Cache vidé avec succès');
+    }
+    
+    /**
+     * Force unlock a board (admin function)
+     */
+    private function forceUnlockBoard() {
+        global $INPUT, $INFO;
+        
+        // Check if user has admin permissions
+        if (!isset($INFO['isadmin']) || !$INFO['isadmin']) {
+            KanbanErrorManager::sendResponse(false, 'Permission refusée - Admin requis', [], 'ADMIN_REQUIRED', 403);
+            return;
+        }
+        
+        $pageId = $INPUT->str('page_id');
+        
+        if (empty($pageId)) {
+            KanbanErrorManager::sendValidationError('page_id', 'Page ID required for force unlock');
+            return;
+        }
+        
+        $adminUser = KanbanAuthManager::getCurrentUser();
+        $result = $this->lockManager->forceReleaseLock($pageId, $adminUser);
+        
+        if ($result['success']) {
+            KanbanErrorManager::sendResponse(true, $result['message'], [
+                'previous_owner' => $result['previous_owner'] ?? null
+            ]);
+        } else {
+            KanbanErrorManager::sendResponse(false, $result['error'], [], 'FORCE_UNLOCK_FAILED', 500);
+        }
     }
 }

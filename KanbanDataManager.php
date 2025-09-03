@@ -229,38 +229,13 @@ class KanbanDataManager
      * @return string Generated content
      */
     private function generateKanbanContent($data) {
+        // CORRECTION: Sauvegarder en format JSON au lieu du format texte ancien
         if (!isset($data['columns']) || !is_array($data['columns'])) {
-            return '';
+            return '[]';
         }
         
-        $content = '';
-        foreach ($data['columns'] as $column) {
-            if (!isset($column['title'])) continue;
-            
-            $content .= "=== " . $column['title'] . " ===\n\n";
-            
-            if (isset($column['cards']) && is_array($column['cards'])) {
-                foreach ($column['cards'] as $card) {
-                    if (!isset($card['title'])) continue;
-                    
-                    $content .= "  * **" . $card['title'] . "**";
-                    
-                    if (!empty($card['description'])) {
-                        $content .= " : " . $card['description'];
-                    }
-                    
-                    if (!empty($card['assignee'])) {
-                        $content .= " (@" . $card['assignee'] . ")";
-                    }
-                    
-                    $content .= "\n";
-                }
-            }
-            
-            $content .= "\n";
-        }
-        
-        return trim($content);
+        // Generate JSON content with proper formatting
+        return json_encode($data['columns'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
     
     /**
@@ -270,55 +245,31 @@ class KanbanDataManager
      * @return array Parsed data structure
      */
     private function parseKanbanContentToData($content) {
-        $data = [
-            'title' => 'Tableau Kanban',
-            'columns' => []
-        ];
+        // Try to parse as JSON first
+        $decodedData = json_decode($content, true);
         
-        // Split content by column headers (=== Title ===)
-        $sections = preg_split('/^===\s*(.+?)\s*===$/m', $content, -1, PREG_SPLIT_DELIM_CAPTURE);
-        
-        for ($i = 1; $i < count($sections); $i += 2) {
-            $columnTitle = trim($sections[$i]);
-            $columnContent = isset($sections[$i + 1]) ? trim($sections[$i + 1]) : '';
-            
-            $column = [
-                'title' => $columnTitle,
-                'cards' => []
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decodedData)) {
+            // Valid JSON content - return as board data
+            return [
+                'title' => 'Tableau Kanban',
+                'columns' => $decodedData
             ];
-            
-            // Parse cards from column content
-            if (!empty($columnContent)) {
-                $lines = explode("\n", $columnContent);
-                foreach ($lines as $line) {
-                    $line = trim($line);
-                    if (preg_match('/^\*\s*\*\*(.+?)\*\*(.*)$/', $line, $matches)) {
-                        $cardTitle = trim($matches[1]);
-                        $cardExtra = trim($matches[2]);
-                        
-                        $card = ['title' => $cardTitle];
-                        
-                        // Extract description and assignee
-                        if (preg_match('/^:\s*(.+?)(?:\s*\(@(\w+)\))?$/', $cardExtra, $extraMatches)) {
-                            if (!empty($extraMatches[1])) {
-                                $card['description'] = trim($extraMatches[1]);
-                            }
-                            if (!empty($extraMatches[2])) {
-                                $card['assignee'] = $extraMatches[2];
-                            }
-                        } elseif (preg_match('/\(@(\w+)\)/', $cardExtra, $assigneeMatch)) {
-                            $card['assignee'] = $assigneeMatch[1];
-                        }
-                        
-                        $column['cards'][] = $card;
-                    }
-                }
-            }
-            
-            $data['columns'][] = $column;
         }
         
-        return $data;
+        // If not valid JSON, return empty board structure
+        KanbanErrorManager::logWarning('Invalid kanban content format', [
+            'content_preview' => substr($content, 0, 100),
+            'json_error' => json_last_error_msg()
+        ]);
+        
+        return [
+            'title' => 'Nouveau tableau',
+            'columns' => [
+                ['title' => 'À faire', 'cards' => []],
+                ['title' => 'En cours', 'cards' => []],
+                ['title' => 'Terminé', 'cards' => []]
+            ]
+        ];
     }
     
     /**

@@ -6,8 +6,20 @@
  * @date 2025-09-03
  */
 
-(function($) {
+// Wait for jQuery to be available
+(function() {
     'use strict';
+    
+    function initKanbanPerformance() {
+        // Check if jQuery is available
+        if (typeof jQuery === 'undefined') {
+            // Retry after a short delay
+            setTimeout(initKanbanPerformance, 100);
+            return;
+        }
+        
+        // jQuery is available, proceed with initialization
+        (function($) {
     
     // Performance configuration
     var perfConfig = {
@@ -486,4 +498,9 @@
         config: perfConfig
     };
     
-})(jQuery);
+        })(jQuery); // End of jQuery wrapper
+    }
+    
+    // Start initialization
+    initKanbanPerformance();
+})();

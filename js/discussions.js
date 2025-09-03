@@ -114,7 +114,7 @@
         try {
             const discussionPageId = getCardDiscussionPageId(pageId, cardId);
             
-            // Appel AJAX vers DokuWiki pour récupérer le contenu de la page
+            // Appel AJAX vers DokuWiki
             const response = await fetch(DOKU_BASE + 'lib/exe/ajax.php', {
                 method: 'POST',
                 headers: {
@@ -135,14 +135,23 @@
                 throw new Error('Erreur lors du chargement des discussions');
             }
 
-            const responseText = await response.text();            
+            const responseText = await response.text();
+            console.log('Raw response:', responseText); // DEBUG: voir la réponse brute
+            
             const data = JSON.parse(responseText);
-            const discussions = data.discussions || [];
             
-            // Mettre en cache
-            setCacheEntry(cacheKey, discussions);
-            
-            return discussions;
+            // Structure de réponse du gestionnaire AJAX : {success: true, message: '', data: {discussions: []}}
+            if (data.success) {
+                const discussions = data.data?.discussions || [];
+                
+                // Mettre en cache
+                setCacheEntry(cacheKey, discussions);
+                
+                return discussions;
+            } else {
+                console.error('API Error:', data.message);
+                throw new Error(data.message || 'Erreur lors du chargement des discussions');
+            }
             
         } catch (error) {
             console.error('Erreur chargement discussions:', error);

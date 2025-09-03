@@ -52,11 +52,13 @@ class KanbanLockManager
         // Clean up expired locks first
         $this->cleanupExpiredLocks();
         
-        // Try DokuWiki native lock first
-        $nativeLock = $this->tryNativeLock($pageId);
-        if ($nativeLock['success']) {
-            $this->logSecurity("Native lock acquired for page: $pageId", $user);
-            return $nativeLock;
+        // Try DokuWiki native lock first only if functions are available
+        if (function_exists('checklock') && function_exists('lock')) {
+            $nativeLock = $this->tryNativeLock($pageId);
+            if ($nativeLock['success']) {
+                $this->logSecurity("Native lock acquired for page: $pageId", $user);
+                return $nativeLock;
+            }
         }
         
         // Fall back to our atomic lock system
@@ -227,15 +229,21 @@ class KanbanLockManager
      */
     private function tryNativeLock($pageId)
     {
-        global $ID;
+        global $ID, $conf;
         $originalID = $ID;
         $ID = $pageId;
         
-        // Check write permissions
-        $pageInfo = pageinfo();
-        if (!$pageInfo['writable']) {
+        // Ensure DokuWiki functions are available
+        if (!function_exists('checklock') || !function_exists('lock')) {
             $ID = $originalID;
-            return $this->errorResult("Page not writable");
+            return $this->errorResult("DokuWiki lock functions not available");
+        }
+        
+        // Check write permissions using auth_quickaclcheck instead of pageinfo
+        $authLevel = auth_quickaclcheck($pageId);
+        if ($authLevel < AUTH_EDIT) {
+            $ID = $originalID;
+            return $this->errorResult("Insufficient permissions for page");
         }
         
         // Check if already locked
@@ -255,7 +263,8 @@ class KanbanLockManager
             return [
                 'success' => true,
                 'locked_by' => $lockedBy,
-                'lock_type' => 'native'
+                'lock_type' => 'native',
+                'expires_at' => time() + ($conf['locktime'] ?? 900) // Default 15 minutes
             ];
         }
         
@@ -276,9 +285,21 @@ class KanbanLockManager
                     // Lock expired, remove it
                     unlink($lockFile);
                     $this->logSecurity("Expired lock removed: $pageId", $user);
+                } else if ($lockInfo['user'] === $user) {
+                    // Same user - renew the lock
+                    $this->logSecurity("Lock renewed for same user: $pageId", $user);
+                    $lockData = $this->createLockData($user);
+                    if ($this->writeAtomicLock($lockFile, $lockData)) {
+                        return [
+                            'success' => true,
+                            'locked_by' => $user,
+                            'lock_type' => 'atomic_renewed',
+                            'expires_at' => time() + $this->maxLockTime
+                        ];
+                    }
                 } else {
-                    // Lock still valid
-                    $this->logSecurity("Lock acquisition failed - already locked: $pageId", $user);
+                    // Lock still valid and owned by someone else
+                    $this->logSecurity("Lock acquisition failed - locked by other user: $pageId", $user);
                     return $this->errorResult("Page locked by: " . $lockInfo['user']);
                 }
             }
@@ -576,6 +597,49 @@ class KanbanLockManager
         return $this->lockDir . $safePageId . '.kanban.lock';
     }
 
+    /**
+     * Force release a lock (admin function)
+     * 
+     * @param string $pageId DokuWiki page ID
+     * @param string $adminUser Admin user forcing the release
+     * @return array Release result
+     */
+    public function forceReleaseLock($pageId, $adminUser)
+    {
+        if (empty($pageId) || empty($adminUser)) {
+            return $this->errorResult("Invalid parameters for force release");
+        }
+        
+        $lockFile = $this->getLockFilePath($pageId);
+        
+        // Try to release DokuWiki native lock
+        if (function_exists('unlock')) {
+            unlock($pageId);
+        }
+        
+        // Remove our custom lock file
+        if (file_exists($lockFile)) {
+            $lockInfo = $this->readLockFile($lockFile);
+            $previousOwner = $lockInfo['user'] ?? 'unknown';
+            
+            if (unlink($lockFile)) {
+                $this->logSecurity("Lock force-released by admin. Page: $pageId, Previous owner: $previousOwner", $adminUser);
+                return [
+                    'success' => true,
+                    'message' => 'Lock force-released successfully',
+                    'previous_owner' => $previousOwner
+                ];
+            } else {
+                return $this->errorResult("Failed to remove lock file");
+            }
+        }
+        
+        return [
+            'success' => true,
+            'message' => 'No lock found to release'
+        ];
+    }
+    
     /**
      * Create error result
      */

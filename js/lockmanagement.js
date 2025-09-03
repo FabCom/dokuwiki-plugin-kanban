@@ -38,7 +38,9 @@
                 
                 return true;
             } else {
-                showNotification('Impossible d\'activer l\'édition: ' + data.error, 'error');
+                const errorMsg = data.message || data.error || 'Erreur de verrouillage inconnue';
+                console.error('Lock error details:', data);
+                showNotification('Impossible d\'activer l\'édition: ' + errorMsg, 'error');
                 return false;
             }
         })

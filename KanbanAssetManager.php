@@ -124,12 +124,6 @@ class KanbanAssetManager
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/kanban-performance.js'
         ];
         
-        // Performance enhancements - load before main script
-        $event->data['script'][] = [
-            'type' => 'text/javascript',
-            'src' => DOKU_BASE . 'lib/plugins/kanban/js/kanban-performance.js'
-        ];
-        
         // Main script - must be loaded last
         $event->data['script'][] = [
             'type' => 'text/javascript',
