@@ -1596,6 +1596,102 @@
     color: white;
 }
 
+/* Column management enhancements */
+.column-order-content {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 12px;
+}
+
+.column-order-handle {
+    color: #6c757d;
+    font-size: 16px;
+    cursor: grab;
+    padding: 4px;
+}
+
+.column-order-handle:active {
+    cursor: grabbing;
+}
+
+.column-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.column-title-input {
+    margin-bottom: 2px;
+    position: relative;
+    z-index: 10;
+}
+
+.column-title-field {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c3e50;
+    background: white;
+    transition: border-color 0.2s ease;
+    cursor: text;
+    user-select: text;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+}
+
+.column-title-field:focus {
+    outline: none;
+    border-color: #007cba;
+    box-shadow: 0 0 0 2px rgba(0, 124, 186, 0.2);
+}
+
+.column-order-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.column-order-controls .kanban-btn-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.column-order-controls .delete-column {
+    background: #dc3545;
+    color: white;
+    margin-top: 4px;
+}
+
+.column-order-controls .delete-column:hover:not(:disabled) {
+    background: #c82333;
+}
+
+.column-order-controls .delete-column:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+.column-order-item.marked-for-deletion {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+}
+
+.column-order-item.marked-for-deletion .column-title-field {
+    background: #f8d7da;
+    color: #721c24;
+}
+
 .kanban-modal-btn-danger:hover {
     background: #c82333;
     border-color: #c82333;

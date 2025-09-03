@@ -87,13 +87,12 @@
         let html = `
             <div class="kanban-column" id="${column.id}" data-column-index="${index}">
                 <div class="kanban-column-header">
-                    <h3 class="kanban-column-title" ${editable ? 'contenteditable="true"' : ''}>${escapeHtml(column.title)}</h3>`;
+                    <h3 class="kanban-column-title">${escapeHtml(column.title)}</h3>`;
         
         if (editable) {
             html += `
                     <div class="kanban-column-actions">
                         <button class="kanban-btn-icon" onclick="KanbanPlugin.addCard('${column.id}')" title="Ajouter carte">+</button>
-                        <button class="kanban-btn-icon" onclick="KanbanPlugin.deleteColumn('${column.id}')" title="Supprimer colonne">×</button>
                     </div>`;
         }
         
@@ -418,25 +417,63 @@
             return;
         }
         
-        if (window.KanbanModal && window.KanbanModal.showColumnOrderModal) {
-            window.KanbanModal.showColumnOrderModal(boardData, function(newOrder) {
-                // Apply new order
-                reorderColumns(boardId, newOrder);
+        if (window.KanbanModalColumns && window.KanbanModalColumns.showColumnOrderModal) {
+            window.KanbanModalColumns.showColumnOrderModal(boardData, function(newOrder, updatedTitles, deletedColumns) {
+                // Apply new order, updated titles, and deletions
+                reorderColumns(boardId, newOrder, updatedTitles, deletedColumns);
             });
         } else {
-            showNotification('Module modal non disponible', 'error');
+            showNotification('Module modal colonnes non disponible', 'error');
         }
     }
 
     /**
-     * Reorder columns based on new order array
+     * Reorder columns based on new order array, update titles, and handle deletions
      */
-    function reorderColumns(boardId, newOrder) {
+    function reorderColumns(boardId, newOrder, updatedTitles, deletedColumns) {
         const board = document.getElementById(boardId);
         const boardData = kanbanBoards[boardId];
-        // Reorder data
-        const reorderedColumns = newOrder.map(index => boardData.columns[index]);
-        boardData.columns = reorderedColumns;
+        
+        // Update column titles first
+        if (updatedTitles) {
+            Object.keys(updatedTitles).forEach(columnIndex => {
+                const index = parseInt(columnIndex);
+                if (boardData.columns[index]) {
+                    boardData.columns[index].title = updatedTitles[columnIndex];
+                }
+            });
+        }
+        
+        // Remove deleted columns (sort indices in reverse order to avoid index shifting)
+        if (deletedColumns && deletedColumns.length > 0) {
+            deletedColumns.sort((a, b) => b - a).forEach(columnIndex => {
+                if (boardData.columns[columnIndex]) {
+                    const deletedColumn = boardData.columns[columnIndex];
+                    console.log('Deleting column:', deletedColumn.title);
+                    boardData.columns.splice(columnIndex, 1);
+                }
+            });
+            
+            // Adjust newOrder indices after deletions
+            const adjustedOrder = newOrder.filter(originalIndex => {
+                return !deletedColumns.includes(originalIndex);
+            }).map(originalIndex => {
+                // Count how many deleted indices are before this one
+                const deletionsBefore = deletedColumns.filter(deletedIndex => deletedIndex < originalIndex).length;
+                return originalIndex - deletionsBefore;
+            });
+            
+            // Reorder remaining columns
+            if (adjustedOrder.length > 0) {
+                const reorderedColumns = adjustedOrder.map(index => boardData.columns[index]);
+                boardData.columns = reorderedColumns;
+            }
+        } else {
+            // Reorder data (no deletions)
+            const reorderedColumns = newOrder.map(index => boardData.columns[index]);
+            boardData.columns = reorderedColumns;
+        }
+        
         // Re-render the board
         renderBoard(board, boardData);
         // Re-initialize interactions
@@ -447,7 +484,7 @@
             // Ne pas appeler updateLockUI car cela interfère avec l'état actuel
         }
         // Save changes
-        saveChanges(boardId, 'reorder_columns');
+        saveChanges(boardId, 'manage_columns');
         showNotification('Colonnes réorganisées avec succès', 'success');
     }
     function addColumn(boardId) {
