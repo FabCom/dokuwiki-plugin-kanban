@@ -162,32 +162,108 @@ function searchMediaSecurely($query, $maxResults = 50) {
     
     return $results;
 }
+        }
+        
+        if (!is_dir($dir)) {
+            return;
+        }
+        
+        $handle = opendir($dir);
+        if (!$handle) {
+            return;
+        }
+        
+        while (false !== ($entry = readdir($handle)) && count($results) < $maxResults) {
+            if ($entry === '.' || $entry === '..') continue;
+            
+            $fullPath = $dir . '/' . $entry;
+            $mediaId = ($namespace ? $namespace . ':' : '') . $entry;
+            
+            if (is_dir($fullPath)) {
+                // Vérifier les permissions sur le dossier
+                if (auth_quickaclcheck($mediaId . ':*') >= AUTH_READ) {
+                    $scanDirectory($fullPath, $mediaId);
+                }
+            } else if (is_file($fullPath)) {
+                // Vérifier que c'est un fichier média supporté
+                $ext = strtolower(pathinfo($entry, PATHINFO_EXTENSION));
+                $supportedTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf', 'doc', 'docx', 'txt', 'mp4', 'avi', 'mov', 'webm', 'ogv'];
+                
+                if (in_array($ext, $supportedTypes)) {
+                    // Vérifier les permissions sur le fichier
+                    if (auth_quickaclcheck($mediaId) >= AUTH_READ) {
+                        // Vérifier si le nom contient la recherche
+                        if (strpos(strtolower($entry), $query) !== false) {
+                            $filesize = filesize($fullPath);
+                            $mtime = filemtime($fullPath);
+                            
+                            // Déterminer le type de média
+                            $imageTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+                            $videoTypes = ['mp4', 'avi', 'mov', 'webm', 'ogv'];
+                            
+                            $mediaType = 'document';
+                            if (in_array($ext, $imageTypes)) {
+                                $mediaType = 'image';
+                            } else if (in_array($ext, $videoTypes)) {
+                                $mediaType = 'video';
+                            }
+                            
+                            $result = [
+                                'type' => 'file',
+                                'mediaType' => $mediaType,
+                                'id' => $mediaId,
+                                'name' => pathinfo($entry, PATHINFO_FILENAME),
+                                'filename' => $entry,
+                                'namespace' => $namespace,
+                                'ext' => $ext,
+                                'size' => $filesize,
+                                'mtime' => $mtime,
+                                'url' => DOKU_BASE . 'lib/exe/fetch.php?media=' . rawurlencode($mediaId)
+                            ];
+                            
+                            // Ajouter thumbnail pour les images
+                            if ($mediaType === 'image') {
+                                $thumbToken = media_get_token($mediaId, 150, 150);
+                                $result['thumb'] = DOKU_BASE . 'lib/exe/fetch.php?media=' . rawurlencode($mediaId) . '&w=150&h=150&tok=' . $thumbToken;
+                            }
+                            
+                            $results[] = $result;
+                        }
+                    }
+                }
+            }
+        }
+        
+        closedir($handle);
+    };
+    
+    // Commencer la recherche depuis la racine des médias
+    $scanDirectory($mediadir);
+    
+    return $results;
+}
 
 try {
-    // SECURITY: Execute secure search
-    $searchResults = searchMediaSecurely($query, $maxResults);
+    $results = searchMediaGlobally($query, $maxResults);
     
-    if (isset($searchResults['error'])) {
-        http_response_code(500);
-        echo json_encode([
-            'success' => false,
-            'error' => $searchResults['error']
-        ]);
-    } else {
-        echo json_encode([
-            'success' => true,
-            'query' => $query,
-            'results' => $searchResults,
-            'count' => count($searchResults)
-        ]);
+    // S'assurer que $results est un tableau
+    if (!is_array($results)) {
+        $results = [];
     }
     
+    echo json_encode([
+        'success' => true,
+        'query' => $query,
+        'results' => $results,
+        'count' => count($results),
+        'maxResults' => $maxResults
+    ]);
+    
 } catch (Exception $e) {
-    error_log("Kanban SECURITY: Media search exception: " . $e->getMessage());
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'error' => 'Search operation failed'
+        'message' => 'Search error: ' . $e->getMessage()
     ]);
 }
 ?>

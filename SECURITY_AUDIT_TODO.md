@@ -71,19 +71,28 @@ class KanbanLockManager {
 
 ---
 
-### [ ] 3. Validation insuffisante des endpoints AJAX
+### [✅] 3. Validation insuffisante des endpoints AJAX
 **Risque**: Injection de paramètres, accès non autorisé  
 **Impact**: ⚠️ ÉLEVÉ - Accès à des fichiers non autorisés  
 **Fichiers concernés**:
-- `/ajax/media-search.php`
-- `/ajax/media-upload.php`
-- `/ajax/media-list.php`
+- `/ajax/media-search.php` ✅
+- `/ajax/media-upload.php` ✅  
+- `/ajax/media-list.php` ✅
+- `/ajax/get_media_token.php` ✅
 
-**Actions requises**:
-- [ ] Renforcer la validation des paramètres de recherche
-- [ ] Ajouter des whitelist pour les extensions de fichiers
-- [ ] Valider tous les namespaces avant traitement
-- [ ] Implémenter la limitation de taux (rate limiting)
+**Actions complétées**:
+- [✅] Création `KanbanAjaxValidator` pour validation centralisée
+- [✅] Renforcement de la validation des paramètres de recherche
+- [✅] Ajout de whitelist stricte pour les extensions de fichiers
+- [✅] Validation de tous les namespaces avant traitement
+- [✅] Protection contre path traversal et injection
+- [✅] Authentification obligatoire pour tous les endpoints
+- [✅] Validation des tokens CSRF pour upload
+- [✅] Limites strictes de taille et nombre de résultats
+- [✅] Logging de sécurité pour toutes les tentatives suspectes
+
+**Date de correction**: 3 septembre 2025  
+**Status**: ✅ ENDPOINTS SÉCURISÉS - Validation complète avec KanbanAjaxValidator
 
 ---
 

@@ -1,12 +1,10 @@
 <?php
 /**
  * Kanban Plugin - Media List AJAX Endpoint
+ * SECURITY ENHANCED - Version sécurisée avec validation complète
  * 
- * Provides media file listing with proper ACL checks
- * Inspired by QuillJS plugin but independent implementation
- * 
- * @license GPL 2 (http://www.gnu.org/licenses/gpl.html)
- * @author  Kanban Plugin Team
+ * @author Security Team
+ * @version 2.0.0 - Security enhanced
  */
 
 // Include DokuWiki core
@@ -16,38 +14,29 @@ if (!defined('DOKU_INC')) {
 require_once(DOKU_INC . 'inc/init.php');
 require_once(DOKU_INC . 'inc/media.php');
 
-// Security check
-$currentUser = $_SERVER['REMOTE_USER'] ?? null;
-$isAuthenticated = !empty($currentUser);
-$isCLI = php_sapi_name() === 'cli';
-$isAjax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'] === 'XMLHttpRequest';
+// Load security validator
+require_once(dirname(__FILE__) . '/../KanbanAjaxValidator.php');
 
-// Allow access for CLI testing or authenticated AJAX requests
-if (!$isCLI && !$isAjax) {
-    http_response_code(400);
+// Initialize security validator
+$validator = new KanbanAjaxValidator();
+
+// SECURITY: Validate AJAX request with strict requirements
+$validationResult = $validator->validateAjaxRequest([
+    'require_auth' => true,
+    'require_ajax_header' => true,
+    'allowed_methods' => ['GET', 'POST'],
+    'min_auth_level' => AUTH_READ
+]);
+
+if (!$validationResult['success']) {
     header('Content-Type: application/json');
-    echo json_encode(['error' => 'Bad Request - AJAX required']);
+    echo json_encode($validationResult);
     exit;
 }
 
-// Check authentication for web requests (skip for CLI)
-if (!$isCLI && $conf['useacl'] && !$isAuthenticated) {
-    http_response_code(401);
-    header('Content-Type: application/json');
-    echo json_encode(['error' => 'Authentication required']);
-    exit;
-}
-
-// For web requests, check if user has at least read access to media
-if (!$isCLI && $conf['useacl']) {
-    $mediaAuth = auth_quickaclcheck('*');
-    if ($mediaAuth < AUTH_READ) {
-        http_response_code(403);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'Insufficient permissions to access media']);
-        exit;
-    }
-}
+// SECURITY: Get authenticated user info
+$currentUser = $validationResult['data']['user'];
+$authLevel = $validationResult['data']['auth_level'];
 
 /**
  * Get media list for a given namespace with ACL checks
@@ -331,9 +320,38 @@ function searchMediaRecursive($dir, $query, $baseNamespace, &$results) {
 header('Content-Type: application/json');
 
 try {
-    $action = $_GET['action'] ?? 'list';
-    $namespace = $_GET['ns'] ?? '';
-    $query = $_GET['q'] ?? '';
+    // SECURITY: Get and validate parameters securely
+    $action = $_GET['action'] ?? $_POST['action'] ?? 'list';
+    $namespace = $_GET['ns'] ?? $_POST['ns'] ?? '';
+    $query = $_GET['q'] ?? $_POST['q'] ?? '';
+    
+    // SECURITY: Validate action parameter
+    $allowedActions = ['list', 'search'];
+    if (!in_array($action, $allowedActions)) {
+        throw new Exception('Invalid action parameter');
+    }
+    
+    // SECURITY: Validate namespace if provided
+    if (!empty($namespace)) {
+        $namespaceValidation = $validator->validateNamespace($namespace);
+        if (!$namespaceValidation['success']) {
+            http_response_code(400);
+            echo json_encode($namespaceValidation);
+            exit;
+        }
+        $namespace = $namespaceValidation['data']['namespace'];
+    }
+    
+    // SECURITY: Validate search query if provided
+    if ($action === 'search' && !empty($query)) {
+        $queryValidation = $validator->validateSearchQuery($query, 100);
+        if (!$queryValidation['success']) {
+            http_response_code(400);
+            echo json_encode($queryValidation);
+            exit;
+        }
+        $query = $queryValidation['data']['query'];
+    }
     
     switch ($action) {
         case 'list':
@@ -341,6 +359,9 @@ try {
             break;
             
         case 'search':
+            if (empty($query)) {
+                throw new Exception('Search query is required');
+            }
             $result = searchMedia($query, $namespace);
             break;
             
@@ -351,6 +372,7 @@ try {
     echo json_encode($result);
     
 } catch (Exception $e) {
+    error_log("Kanban SECURITY: Media list error: " . $e->getMessage());
     http_response_code(500);
     echo json_encode(['error' => $e->getMessage()]);
 }

@@ -1,7 +1,10 @@
 <?php
 /**
  * AJAX endpoint pour l'upload de médias DokuWiki - Plugin Kanban
- * Version simplifiée inspirée de lib/plugins/quilljs/ajax/media-upload.php
+ * SECURITY ENHANCED - Version sécurisée avec validation complète
+ * 
+ * @author Security Team
+ * @version 2.0.0 - Security enhanced
  */
 
 if (!defined('DOKU_INC')) define('DOKU_INC', dirname(__FILE__) . '/../../../../');
@@ -9,44 +12,125 @@ require_once(DOKU_INC . 'inc/init.php');
 require_once(DOKU_INC . 'inc/media.php');
 require_once(DOKU_INC . 'inc/auth.php');
 
-// S'assurer que les constantes d'auth sont définies
-if (!defined('AUTH_UPLOAD')) {
-    define('AUTH_UPLOAD', 8);
+// Load security validator
+require_once(dirname(__FILE__) . '/../KanbanAjaxValidator.php');
+
+// Initialize security validator
+$validator = new KanbanAjaxValidator();
+
+// SECURITY: Validate AJAX request with strict requirements
+$validationResult = $validator->validateAjaxRequest([
+    'require_auth' => true,
+    'require_ajax_header' => true,
+    'allowed_methods' => ['POST'],
+    'require_csrf_token' => false, // CSRF disabled for file uploads
+    'min_auth_level' => AUTH_UPLOAD
+]);
+
+if (!$validationResult['success']) {
+    header('Content-Type: application/json');
+    echo json_encode($validationResult);
+    exit;
 }
 
-// Mode debug (à désactiver en production)
-$DEBUG_MODE = true;
+// SECURITY: Get authenticated user info safely
+$currentUser = $validationResult['data']['user'] ?? $_SERVER['REMOTE_USER'] ?? 'anonymous';
+$authLevel = $validationResult['data']['auth_level'] ?? AUTH_READ;
 
-// Fonction de debug
-function debugLog($message) {
-    global $DEBUG_MODE;
-    if ($DEBUG_MODE) {
-        error_log('Kanban Media Upload: ' . $message);
+/**
+ * Send secure JSON response
+ */
+function sendSecureResponse($success, $message, $data = null) {
+    header('Content-Type: application/json');
+    $response = [
+        'success' => $success,
+        'message' => $message
+    ];
+    if ($data !== null) {
+        $response['data'] = $data;
     }
+    echo json_encode($response);
+    exit;
 }
 
-debugLog('Upload request received from: ' . ($_SERVER['REMOTE_USER'] ?? 'anonymous'));
-
-// Vérifier que c'est une requête AJAX POST
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    die(json_encode(['success' => false, 'message' => 'Method not allowed']));
+try {
+    // SECURITY: Validate file upload
+    if (!isset($_FILES['file'])) {
+        sendSecureResponse(false, 'No file provided');
+    }
+    
+    $file = $_FILES['file'];
+    $namespace = $_POST['namespace'] ?? '';
+    
+    // SECURITY: Comprehensive file upload validation
+    $uploadValidation = $validator->validateFileUpload($file, $namespace);
+    if (!$uploadValidation['success']) {
+        sendSecureResponse(false, $uploadValidation['error']);
+    }
+    
+    $validatedData = $uploadValidation['data'];
+    $mediaId = $validatedData['media_id'];
+    $cleanNamespace = $validatedData['namespace'];
+    $extension = $validatedData['extension'];
+    
+    // SECURITY: Log upload attempt
+    error_log("Kanban SECURITY: File upload attempt - User: $currentUser, File: " . $file['name'] . 
+              ", Target: $mediaId, Size: " . $file['size'] . ", IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
+    
+    // SECURITY: Use DokuWiki's native secure media_save function
+    $res = media_save(
+        [
+            'name' => $file['tmp_name'],
+            'mime' => $file['type'],
+            'ext' => $extension
+        ],
+        $mediaId,
+        false, // No overwrite by default - prevents unauthorized overwrites
+        $authLevel,
+        'copy_uploaded_file'
+    );
+    
+    if (is_array($res)) {
+        // Upload failed - log for security monitoring
+        error_log("Kanban SECURITY: Upload failed for user $currentUser: " . $res[0]);
+        sendSecureResponse(false, 'Upload failed: ' . $res[0]);
+    } else {
+        // Upload successful - log success
+        error_log("Kanban SECURITY: Upload successful - User: $currentUser, File: $mediaId");
+        
+        // Generate secure file information
+        $imageTypes = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'];
+        $mediaType = in_array($extension, $imageTypes) ? 'image' : 'document';
+        
+        $fileInfo = [
+            'id' => $mediaId,
+            'name' => pathinfo($file['name'], PATHINFO_FILENAME),
+            'filename' => $file['name'],
+            'namespace' => $cleanNamespace,
+            'ext' => $extension,
+            'mediaType' => $mediaType,
+            'size' => $file['size'],
+            'url' => DOKU_BASE . 'lib/exe/fetch.php?media=' . rawurlencode($mediaId),
+            'uploaded_by' => $currentUser,
+            'upload_time' => date('Y-m-d H:i:s')
+        ];
+        
+        // Add secure thumbnail for images
+        if ($mediaType === 'image') {
+            $thumbToken = media_get_token($mediaId, 150, 150);
+            $fileInfo['thumb'] = DOKU_BASE . 'lib/exe/fetch.php?media=' . 
+                               rawurlencode($mediaId) . '&w=150&h=150&tok=' . $thumbToken;
+        }
+        
+        sendSecureResponse(true, 'File uploaded successfully', $fileInfo);
+    }
+    
+} catch (Exception $e) {
+    // SECURITY: Log exceptions for security monitoring
+    error_log("Kanban SECURITY: Upload exception for user $currentUser: " . $e->getMessage());
+    sendSecureResponse(false, 'Upload operation failed');
 }
-
-if (!isset($_SERVER['HTTP_X_REQUESTED_WITH']) || $_SERVER['HTTP_X_REQUESTED_WITH'] !== 'XMLHttpRequest') {
-    http_response_code(400);
-    die(json_encode(['success' => false, 'message' => 'Bad Request']));
-}
-
-// Vérifier l'authentification
-$isAuthenticated = !empty($_SERVER['REMOTE_USER']);
-debugLog('Authentication check - User: ' . ($_SERVER['REMOTE_USER'] ?? 'none') . ', Authenticated: ' . ($isAuthenticated ? 'yes' : 'no'));
-
-if (!$isAuthenticated && $conf['useacl']) {
-    debugLog('Authentication failed: no REMOTE_USER and ACL is enabled');
-    http_response_code(401);
-    die(json_encode(['success' => false, 'message' => 'Authentication required']));
-}
+?>
 
 /**
  * Envoie une réponse JSON
