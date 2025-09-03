@@ -9,6 +9,19 @@
 
 class KanbanAuthManager 
 {
+    private static $cacheManager = null;
+    
+    /**
+     * Get cache manager instance
+     */
+    private static function getCacheManager() {
+        if (self::$cacheManager === null) {
+            require_once(dirname(__FILE__) . '/KanbanCacheManager.php');
+            self::$cacheManager = KanbanCacheManager::getInstance();
+        }
+        return self::$cacheManager;
+    }
+    
     /**
      * Check if user can read a page/media
      * 
@@ -21,15 +34,29 @@ class KanbanAuthManager
             return false;
         }
         
+        $user = self::getCurrentUser();
+        $cacheManager = self::getCacheManager();
+        
+        // Try to get from cache first
+        $cachedResult = $cacheManager->getCachedACL($user, $pageId, 'read');
+        if ($cachedResult !== null) {
+            return $cachedResult;
+        }
+        
         global $conf;
         
         // If ACL is disabled, allow read access
         if (!$conf['useacl']) {
-            return true;
+            $hasAccess = true;
+            $cacheManager->cacheACL($user, $pageId, 'read', $hasAccess);
+            return $hasAccess;
         }
         
         $authLevel = auth_quickaclcheck($pageId);
         $hasAccess = $authLevel >= AUTH_READ;
+        
+        // Cache the result
+        $cacheManager->cacheACL($user, $pageId, 'read', $hasAccess);
         
         self::logAccess('READ', $pageId, $hasAccess, $authLevel);
         
@@ -48,15 +75,29 @@ class KanbanAuthManager
             return false;
         }
         
+        $user = self::getCurrentUser();
+        $cacheManager = self::getCacheManager();
+        
+        // Try to get from cache first
+        $cachedResult = $cacheManager->getCachedACL($user, $pageId, 'edit');
+        if ($cachedResult !== null) {
+            return $cachedResult;
+        }
+        
         global $conf;
         
         // If ACL is disabled, check basic authentication
         if (!$conf['useacl']) {
-            return !empty($_SERVER['REMOTE_USER']);
+            $hasAccess = !empty($_SERVER['REMOTE_USER']);
+            $cacheManager->cacheACL($user, $pageId, 'edit', $hasAccess);
+            return $hasAccess;
         }
         
         $authLevel = auth_quickaclcheck($pageId);
         $hasAccess = $authLevel >= AUTH_EDIT;
+        
+        // Cache the result
+        $cacheManager->cacheACL($user, $pageId, 'edit', $hasAccess);
         
         self::logAccess('EDIT', $pageId, $hasAccess, $authLevel);
         
@@ -71,17 +112,31 @@ class KanbanAuthManager
      */
     public static function canUpload($namespace = '')
     {
+        $user = self::getCurrentUser();
+        $cacheManager = self::getCacheManager();
+        $testId = $namespace ? $namespace . ':test' : 'test';
+        
+        // Try to get from cache first
+        $cachedResult = $cacheManager->getCachedACL($user, $testId, 'upload');
+        if ($cachedResult !== null) {
+            return $cachedResult;
+        }
+        
         global $conf;
         
         // If ACL is disabled, check basic authentication
         if (!$conf['useacl']) {
-            return !empty($_SERVER['REMOTE_USER']);
+            $hasAccess = !empty($_SERVER['REMOTE_USER']);
+            $cacheManager->cacheACL($user, $testId, 'upload', $hasAccess);
+            return $hasAccess;
         }
         
         // Check upload permission for namespace
-        $testId = $namespace ? $namespace . ':test' : 'test';
         $authLevel = auth_quickaclcheck($testId);
         $hasAccess = $authLevel >= AUTH_UPLOAD;
+        
+        // Cache the result
+        $cacheManager->cacheACL($user, $testId, 'upload', $hasAccess);
         
         self::logAccess('UPLOAD', $testId, $hasAccess, $authLevel);
         

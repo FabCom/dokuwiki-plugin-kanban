@@ -499,6 +499,26 @@ class KanbanLockManager
     }
 
     /**
+     * Get lock status in a simplified format for AJAX responses
+     * 
+     * @param string $pageId The page identifier
+     * @return array Lock status information
+     */
+    public function getLockStatus($pageId)
+    {
+        $lockInfo = $this->getLockInfo($pageId);
+        
+        return [
+            'locked' => $lockInfo['locked'],
+            'locked_by' => $lockInfo['locked_by'],
+            'lock_type' => $lockInfo['lock_type'],
+            'expires_at' => $lockInfo['expires_at'],
+            'can_override' => false, // For future implementation
+            'timestamp' => time()
+        ];
+    }
+
+    /**
      * Clean up an expired lock file safely
      * 
      * @param string $pageId The page identifier
