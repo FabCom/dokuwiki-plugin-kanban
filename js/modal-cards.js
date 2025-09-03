@@ -412,6 +412,23 @@
                     <div class="view-content">${escapeHtml(cardData.description)}</div>
                 </div>
                 ` : ''}
+
+                <!-- Tags -->
+                ${cardData.tags && cardData.tags.length > 0 ? `
+                <div class="view-group">
+                    <label>🏷️ Tags</label>
+                    <div class="view-content">
+                        <div class="kanban-tags-readonly">
+                            ${cardData.tags.map(tag => `<span class="kanban-tag">${escapeHtml(tag)}</span>`).join('')}
+                        </div>
+                    </div>
+                </div>
+                ` : ''}
+            </div>
+
+            <!-- Section: Organisation -->
+            <div class="kanban-modal-section">
+                <h4 class="kanban-modal-section-title">🎯 Organisation</h4>
                 
                 <div class="view-group-row">
                     <div class="view-group view-group-half">
@@ -423,7 +440,7 @@
                     
                     ${cardData.assignee ? `
                     <div class="view-group view-group-half">
-                        <label>👤 Assigné à</label>
+                        <label>� Assigné à</label>
                         <div class="view-content">${escapeHtml(cardData.assignee)}</div>
                     </div>
                     ` : ''}
@@ -433,18 +450,6 @@
                 <div class="view-group">
                     <label>📅 Date d'échéance</label>
                     <div class="view-content">${formatDate(cardData.dueDate)}</div>
-                </div>
-                ` : ''}
-
-                <!-- Tags -->
-                ${cardData.tags && cardData.tags.length > 0 ? `
-                <div class="view-group">
-                    <label>🏷️ Tags</label>
-                    <div class="view-content">
-                        <div class="kanban-tags-readonly">
-                            ${cardData.tags.map(tag => `<span class="kanban-tag">${escapeHtml(tag)}</span>`).join('')}
-                        </div>
-                    </div>
                 </div>
                 ` : ''}
             </div>
