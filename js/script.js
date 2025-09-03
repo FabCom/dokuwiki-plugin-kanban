@@ -231,15 +231,20 @@
             if (boardContainer.dataset.editable === 'true') {
                 html += `
                     <div class="kanban-empty-state">
-                        <div class="kanban-empty-icon">📋</div>
-                        <h3 class="kanban-empty-title">Tableau kanban vide</h3>
+                        <div class="kanban-empty-icon">🎯</div>
+                        <h3 class="kanban-empty-title">Créer un nouveau tableau</h3>
                         <p class="kanban-empty-description">
-                            Ce tableau kanban ne contient encore aucune colonne.<br>
-                            Cliquez sur <strong>"Gérer les colonnes"</strong> pour commencer à organiser vos tâches.
+                            Démarrez rapidement avec un template ou créez un tableau personnalisé.<br>
+                            Choisissez le workflow qui correspond le mieux à vos besoins.
                         </p>
-                        <button class="kanban-btn kanban-btn-primary kanban-btn-large" onclick="window.showColumnOrderModal && window.showColumnOrderModal('${boardContainer.id}')">
-                            ➕ Créer ma première colonne
-                        </button>
+                        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                            <button class="template-btn template-btn-primary" onclick="window.templateModal && window.templateModal.show()">
+                                ✨ Choisir un template
+                            </button>
+                            <button class="template-btn template-btn-secondary" onclick="window.showColumnOrderModal && window.showColumnOrderModal('${boardContainer.id}')">
+                                📋 Créer un tableau vide
+                            </button>
+                        </div>
                     </div>
                 `;
             } else {

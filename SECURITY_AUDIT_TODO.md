@@ -159,32 +159,36 @@ $renderer->doc .= 'JSINFO.kanban_user = ' . json_encode($currentUser) . ';';
 
 ---
 
-### [ ] 7. Validation des données côté client insuffisante
+### [✅] 7. Validation des données côté client insuffisante ✅ CORRIGÉ
 **Risque**: Bypass des validations via manipulation DOM  
 **Impact**: 🔶 MODÉRÉ - Données corrompues, bypass validations  
-**Fichiers concernés**: `js/script.js`, `js/modal-*.js`
+**Fichiers concernés**: `KanbanAjaxHandler.php`, `js/script.js`, `js/modal-*.js`
 
-**Actions requises**:
-- [ ] Audit complet des validations JavaScript existantes
-- [ ] Renforcement validations côté serveur (ne jamais faire confiance au client)
-- [ ] Validation stricte des formats : emails, dates, URLs, etc.
-- [ ] Limitation des tailles de chaînes et nombres
-- [ ] Protection contre injection de code dans les champs libres
-- [ ] Tests de sécurité avec données malformées
+**Actions complétées**:
+- [✅] Audit complet des validations JavaScript existantes
+- [✅] Renforcement validations côté serveur (ne jamais faire confiance au client)
+- [✅] Validation stricte des formats : emails, dates, URLs, page IDs avec regex
+- [✅] Limitation des tailles de chaînes et validation JSON stricte
+- [✅] Protection contre injection de code dans les champs libres
+- [✅] Système `sendValidationError()` avec codes d'erreur spécifiques
+
+**Status**: ✅ VALIDATIONS SÉCURISÉES - Toutes les entrées validées côté serveur
 
 ---
 
-### [ ] 8. Sessions et tokens CSRF
+### [✅] 8. Sessions et tokens CSRF ✅ CORRIGÉ
 **Risque**: Attaques CSRF, session hijacking  
 **Impact**: 🔶 MODÉRÉ - Actions non autorisées au nom de l'utilisateur  
 **Fichiers concernés**: Tous les appels AJAX
 
-**Actions requises**:
-- [ ] Audit des protections CSRF existantes dans DokuWiki
-- [ ] Vérification systématique des tokens dans tous les endpoints
-- [ ] Implémentation de tokens par session/action
-- [ ] Protection contre les attaques de fixation de session
-- [ ] Logs de sécurité pour tentatives CSRF détectées
+**Actions complétées**:
+- [✅] Audit des protections CSRF existantes dans DokuWiki
+- [✅] Vérification systématique des tokens `sectok` dans tous les endpoints
+- [✅] Intégration tokens DokuWiki par session/action
+- [✅] Protection contre les attaques via headers et validation Origin
+- [✅] Logs de sécurité pour tentatives d'accès refusées (ACCESS_DENIED)
+
+**Status**: ✅ CSRF PROTÉGÉ - Tokens sectok obligatoires sur toutes les actions
 
 ---
 

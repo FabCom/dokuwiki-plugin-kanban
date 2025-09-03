@@ -91,6 +91,15 @@ class KanbanAjaxHandler
                 case 'force_unlock':
                     $this->forceUnlockBoard();
                     break;
+                case 'get_templates':
+                    $this->getTemplates();
+                    break;
+                case 'create_empty_board':
+                    $this->createEmptyBoard();
+                    break;
+                case 'create_board_from_template':
+                    $this->createBoardFromTemplate();
+                    break;
                 default:
                     KanbanErrorManager::sendResponse(false, 'Action non reconnue', [], 'UNKNOWN_ACTION', 400);
             }
@@ -594,6 +603,184 @@ class KanbanAjaxHandler
             ]);
         } else {
             KanbanErrorManager::sendResponse(false, $result['error'], [], 'FORCE_UNLOCK_FAILED', 500);
+        }
+    }
+    
+    /**
+     * Get available templates
+     */
+    private function getTemplates() {
+        require_once(dirname(__FILE__) . '/KanbanTemplateManager.php');
+        
+        try {
+            $templates = KanbanTemplateManager::getAvailableTemplates();
+            $categories = KanbanTemplateManager::getTemplateCategories();
+            
+            KanbanErrorManager::sendResponse(true, 'Templates loaded successfully', [
+                'templates' => $templates,
+                'categories' => $categories
+            ]);
+        } catch (Exception $e) {
+            KanbanErrorManager::logError('Template loading failed', [
+                'error' => $e->getMessage()
+            ]);
+            KanbanErrorManager::sendServerError('Failed to load templates');
+        }
+    }
+    
+    /**
+     * Create empty board
+     */
+    private function createEmptyBoard() {
+        global $INPUT;
+        
+        // SECURITY: Validate authentication
+        if (!KanbanAuthManager::isAuthenticated()) {
+            KanbanErrorManager::logSecurity('Empty board creation denied - authentication failed');
+            KanbanErrorManager::sendAuthError();
+            return;
+        }
+        
+        $pageId = $INPUT->str('page');
+        
+        if (empty($pageId)) {
+            KanbanErrorManager::sendValidationError('page', 'Page ID required');
+            return;
+        }
+        
+        // SECURITY: Validate page ID format
+        if (!preg_match('/^[a-zA-Z0-9:_-]+$/', $pageId)) {
+            KanbanErrorManager::logSecurity('Invalid page ID format for empty board', ['page_id' => $pageId]);
+            KanbanErrorManager::sendValidationError('page', 'Invalid format');
+            return;
+        }
+        
+        try {
+            // Create basic empty board structure
+            $boardData = [
+                'board_id' => 'board_' . time() . '_' . uniqid(),
+                'title' => 'Nouveau tableau',
+                'description' => '',
+                'created_at' => date('c'),
+                'created_by' => KanbanAuthManager::getCurrentUser(),
+                'columns' => [
+                    [
+                        'id' => 'col_todo_' . time(),
+                        'title' => '📋 À faire',
+                        'color' => '#fff3cd',
+                        'wip_limit' => null,
+                        'cards' => []
+                    ],
+                    [
+                        'id' => 'col_progress_' . time(),
+                        'title' => '🏃 En cours',
+                        'color' => '#d1ecf1',
+                        'wip_limit' => 3,
+                        'cards' => []
+                    ],
+                    [
+                        'id' => 'col_done_' . time(),
+                        'title' => '✅ Terminé',
+                        'color' => '#d4edda',
+                        'wip_limit' => null,
+                        'cards' => []
+                    ]
+                ]
+            ];
+            
+            // Save board data
+            $success = $this->dataManager->saveBoardData($pageId, $boardData['board_id'], $boardData, 'creation');
+            
+            if ($success) {
+                // Clear cache
+                $this->cacheManager->clearAllCaches();
+                
+                KanbanErrorManager::sendResponse(true, 'Empty board created successfully', [
+                    'board_id' => $boardData['board_id']
+                ]);
+            } else {
+                KanbanErrorManager::sendResponse(false, 'Failed to create empty board', [], 'SAVE_FAILED', 500);
+            }
+        } catch (Exception $e) {
+            KanbanErrorManager::logError('Empty board creation failed', [
+                'page_id' => $pageId,
+                'error' => $e->getMessage()
+            ]);
+            KanbanErrorManager::sendServerError('Failed to create empty board');
+        }
+    }
+    
+    /**
+     * Create board from template
+     */
+    private function createBoardFromTemplate() {
+        global $INPUT;
+        
+        // SECURITY: Validate authentication
+        if (!KanbanAuthManager::isAuthenticated()) {
+            KanbanErrorManager::logSecurity('Template board creation denied - authentication failed');
+            KanbanErrorManager::sendAuthError();
+            return;
+        }
+        
+        $pageId = $INPUT->str('page');
+        $templateId = $INPUT->str('template_id');
+        
+        if (empty($pageId) || empty($templateId)) {
+            KanbanErrorManager::sendValidationError('required_fields', 'Page and template_id required');
+            return;
+        }
+        
+        // SECURITY: Validate page ID format
+        if (!preg_match('/^[a-zA-Z0-9:_-]+$/', $pageId)) {
+            KanbanErrorManager::logSecurity('Invalid page ID format for template board', ['page_id' => $pageId]);
+            KanbanErrorManager::sendValidationError('page', 'Invalid format');
+            return;
+        }
+        
+        // SECURITY: Validate template ID format
+        if (!preg_match('/^[a-z0-9_-]+$/', $templateId)) {
+            KanbanErrorManager::logSecurity('Invalid template ID format', ['template_id' => $templateId]);
+            KanbanErrorManager::sendValidationError('template_id', 'Invalid format');
+            return;
+        }
+        
+        try {
+            require_once(dirname(__FILE__) . '/KanbanTemplateManager.php');
+            
+            // Create board from template
+            $boardData = KanbanTemplateManager::createBoardFromTemplate($templateId, $pageId);
+            
+            if (!$boardData) {
+                KanbanErrorManager::sendValidationError('template_id', 'Template not found');
+                return;
+            }
+            
+            // Add creation metadata
+            $boardData['created_by'] = KanbanAuthManager::getCurrentUser();
+            
+            // Save board data
+            $success = $this->dataManager->saveBoardData($pageId, $boardData['board_id'], $boardData, 'creation');
+            
+            if ($success) {
+                // Clear cache
+                $this->cacheManager->clearAllCaches();
+                
+                KanbanErrorManager::sendResponse(true, 'Board created from template successfully', [
+                    'board_id' => $boardData['board_id'],
+                    'template_id' => $templateId,
+                    'template_name' => $boardData['title']
+                ]);
+            } else {
+                KanbanErrorManager::sendResponse(false, 'Failed to create board from template', [], 'SAVE_FAILED', 500);
+            }
+        } catch (Exception $e) {
+            KanbanErrorManager::logError('Template board creation failed', [
+                'page_id' => $pageId,
+                'template_id' => $templateId,
+                'error' => $e->getMessage()
+            ]);
+            KanbanErrorManager::sendServerError('Failed to create board from template');
         }
     }
 }
