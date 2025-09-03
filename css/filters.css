@@ -1,0 +1,394 @@
+/* ===== KANBAN FILTERS STYLES ===== */
+
+/* Filters Container */
+.kanban-filters-container {
+    margin-top: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    overflow: hidden;
+}
+
+.kanban-filters-section {
+    padding: 0;
+}
+
+/* Search Bar (always visible) */
+.kanban-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 15px;
+    background: white;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.kanban-search-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 2px solid #e9ecef;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background: white;
+}
+
+.kanban-search-input:focus {
+    outline: none;
+    border-color: #007cba;
+    box-shadow: 0 0 0 3px rgba(0, 124, 186, 0.1);
+}
+
+.kanban-search-input::placeholder {
+    color: #6c757d;
+    font-style: italic;
+}
+
+.kanban-filters-toggle {
+    white-space: nowrap;
+    min-width: 100px;
+}
+
+.kanban-clear-filters {
+    white-space: nowrap;
+    border: 1px solid #dc3545;
+    color: #dc3545;
+    background: white;
+}
+
+.kanban-clear-filters:hover {
+    background: #dc3545;
+    color: white;
+}
+
+/* Advanced Filters Panel */
+.kanban-advanced-filters {
+    padding: 15px;
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+        padding: 0 15px;
+    }
+    to {
+        opacity: 1;
+        max-height: 500px;
+        padding: 15px;
+    }
+}
+
+/* Filter Groups */
+.kanban-filter-group {
+    margin-bottom: 15px;
+}
+
+.kanban-filter-group:last-child {
+    margin-bottom: 0;
+}
+
+.kanban-filter-label {
+    display: block;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+/* Filter Checkboxes */
+.kanban-tags-filter,
+.kanban-assignees-filter,
+.kanban-priorities-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.kanban-filter-checkbox {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.1s ease;
+}
+
+.kanban-filter-checkbox:hover {
+    transform: translateY(-1px);
+}
+
+.kanban-filter-checkbox input[type="checkbox"] {
+    display: none;
+}
+
+.kanban-filter-checkbox span {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 2px solid #dee2e6;
+    background: white;
+    color: #6c757d;
+    transition: all 0.2s ease;
+}
+
+.kanban-filter-checkbox input[type="checkbox"]:checked + span {
+    border-color: #007cba;
+    background: #007cba;
+    color: white;
+    box-shadow: 0 2px 4px rgba(0, 124, 186, 0.2);
+}
+
+/* Specific filter styles */
+.kanban-tag {
+    background: #e9ecef !important;
+    color: #495057 !important;
+    border-color: #ced4da !important;
+}
+
+.kanban-filter-checkbox input[type="checkbox"]:checked + .kanban-tag {
+    background: #17a2b8 !important;
+    border-color: #17a2b8 !important;
+    color: white !important;
+}
+
+.kanban-assignee {
+    background: #f8f9fa !important;
+    color: #495057 !important;
+    border-color: #ced4da !important;
+}
+
+.kanban-filter-checkbox input[type="checkbox"]:checked + .kanban-assignee {
+    background: #28a745 !important;
+    border-color: #28a745 !important;
+    color: white !important;
+}
+
+/* Priority badges in filters */
+.kanban-priority-badge {
+    border: 2px solid #dee2e6 !important;
+    background: white !important;
+}
+
+.kanban-priority-badge.priority-high {
+    color: #dc3545 !important;
+}
+
+.kanban-priority-badge.priority-medium {
+    color: #ffc107 !important;
+}
+
+.kanban-priority-badge.priority-normal {
+    color: #28a745 !important;
+}
+
+.kanban-priority-badge.priority-low {
+    color: #007bff !important;
+}
+
+.kanban-filter-checkbox input[type="checkbox"]:checked + .kanban-priority-badge {
+    background: var(--priority-color) !important;
+    border-color: var(--priority-color) !important;
+    color: white !important;
+}
+
+.kanban-filter-checkbox input[type="checkbox"]:checked + .kanban-priority-badge.priority-high {
+    background: #dc3545 !important;
+    border-color: #dc3545 !important;
+}
+
+.kanban-filter-checkbox input[type="checkbox"]:checked + .kanban-priority-badge.priority-medium {
+    background: #ffc107 !important;
+    border-color: #ffc107 !important;
+    color: #212529 !important;
+}
+
+.kanban-filter-checkbox input[type="checkbox"]:checked + .kanban-priority-badge.priority-normal {
+    background: #28a745 !important;
+    border-color: #28a745 !important;
+}
+
+.kanban-filter-checkbox input[type="checkbox"]:checked + .kanban-priority-badge.priority-low {
+    background: #007bff !important;
+    border-color: #007bff !important;
+}
+
+/* Date Range Filter */
+.kanban-date-filter {
+    max-width: 200px;
+}
+
+.kanban-date-range-select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 2px solid #e9ecef;
+    border-radius: 6px;
+    font-size: 14px;
+    background: white;
+    color: #495057;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.kanban-date-range-select:focus {
+    outline: none;
+    border-color: #007cba;
+    box-shadow: 0 0 0 3px rgba(0, 124, 186, 0.1);
+}
+
+/* Filter Status */
+.kanban-filter-status {
+    padding: 10px 15px;
+    background: #e3f2fd;
+    border-top: 1px solid #bbdefb;
+    color: #0d47a1;
+    font-size: 13px;
+}
+
+.kanban-filter-count {
+    font-weight: 600;
+    margin-bottom: 5px;
+    display: block;
+}
+
+.kanban-active-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.kanban-active-filter {
+    background: #1976d2;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .kanban-search-bar {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .kanban-search-input {
+        width: 100%;
+    }
+    
+    .kanban-filters-toggle,
+    .kanban-clear-filters {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .kanban-tags-filter,
+    .kanban-assignees-filter,
+    .kanban-priorities-filter {
+        justify-content: center;
+    }
+    
+    .kanban-filter-group {
+        text-align: center;
+    }
+    
+    .kanban-active-filters {
+        justify-content: center;
+    }
+}
+
+/* Integration with Fullscreen Mode */
+.kanban-board.kanban-fullscreen .kanban-filters-container {
+    margin-top: 10px;
+    border-radius: 6px;
+}
+
+.kanban-board.kanban-fullscreen .kanban-search-bar {
+    padding: 10px 12px;
+}
+
+.kanban-board.kanban-fullscreen .kanban-advanced-filters {
+    padding: 12px;
+}
+
+/* Hide filters only when explicitly disabled */
+.kanban-board[data-filters="disabled"] .kanban-filters-container {
+    display: none;
+}
+
+/* Integration with locked state */
+.kanban-locked-other .kanban-filters-container {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.kanban-locked-other .kanban-search-input,
+.kanban-locked-other .kanban-filters-toggle,
+.kanban-locked-other .kanban-clear-filters {
+    cursor: not-allowed;
+}
+
+/* Loading state */
+.kanban-filters-loading {
+    position: relative;
+}
+
+.kanban-filters-loading::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    z-index: 1;
+}
+
+/* Empty state when no results */
+.kanban-no-results {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+}
+
+.kanban-no-results-icon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+    opacity: 0.5;
+}
+
+.kanban-no-results-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.kanban-no-results-description {
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+/* Animation for filtering */
+.kanban-card {
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.kanban-card.filtering-out {
+    opacity: 0;
+    transform: scale(0.95);
+}
+
+.kanban-column.empty-filtered {
+    opacity: 0.6;
+}
+
+.kanban-column.empty-filtered .kanban-column-header {
+    background: #f8f9fa;
+}

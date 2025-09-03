@@ -42,6 +42,13 @@ class action_plugin_kanban extends ActionPlugin
             'rel' => 'stylesheet',
             'href' => DOKU_BASE . 'lib/plugins/kanban/style.css'
         ];
+        
+        // Add filters CSS
+        $event->data['link'][] = [
+            'type' => 'text/css',
+            'rel' => 'stylesheet',
+            'href' => DOKU_BASE . 'lib/plugins/kanban/css/filters.css'
+        ];
 
         // Add JavaScript modules in correct dependency order
         $event->data['script'][] = [
@@ -93,6 +100,11 @@ class action_plugin_kanban extends ActionPlugin
         $event->data['script'][] = [
             'type' => 'text/javascript',
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/dragdrop.js'
+        ];
+        
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/filters.js'
         ];
         
         $event->data['script'][] = [

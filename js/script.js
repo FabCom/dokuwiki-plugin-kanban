@@ -83,8 +83,12 @@
         }
         
         html += `</div>`;
+        html += `</div>`;
         
-        html += `</div><div class="kanban-columns">`;
+        // Add filters section (always show unless explicitly disabled)
+        html += generateFiltersHTML(boardContainer.id);
+        
+        html += `<div class="kanban-columns">`;
         
         // Vérifier si le kanban est vide
         if (!boardData.columns || boardData.columns.length === 0) {
@@ -739,6 +743,23 @@
             console.warn('KanbanLockManagement module not available');
         }
         
+        // Initialize filters system with delay to ensure DOM is ready
+        if (window.KanbanFilters) {
+            const boardId = board.id;
+            setTimeout(() => {
+                const filtersInstance = new window.KanbanFilters(boardId);
+                filtersInstance.initialize();
+                
+                // Store filters instance for later access
+                if (!window.kanbanFiltersInstances) {
+                    window.kanbanFiltersInstances = {};
+                }
+                window.kanbanFiltersInstances[boardId] = filtersInstance;
+            }, 100);
+        } else {
+            console.warn('KanbanFilters module not available');
+        }
+        
         if (board.dataset.sortable === 'true') {
             // Setup drag and drop for existing cards (will be disabled until unlocked)
             const cards = board.querySelectorAll('.kanban-card');
@@ -991,6 +1012,105 @@
                 toggleFullscreen(fullscreenBoard.id);
             }
         }
+    }
+
+    /**
+     * Generate filters HTML for the kanban board
+     */
+    function generateFiltersHTML(boardId) {
+        return `
+        <div class="kanban-filters-container" id="filters-${boardId}">
+            <div class="kanban-filters-section">
+                <!-- Barre de recherche toujours visible -->
+                <div class="kanban-search-bar">
+                    <input type="text" 
+                           class="kanban-search-input" 
+                           placeholder="🔍 Rechercher (min. 3 caractères) dans titres, descriptions, tags..."
+                           id="search-${boardId}">
+                    
+                    <button type="button" 
+                            class="btn btn-sm btn-outline-primary kanban-filters-toggle"
+                            id="toggle-filters-${boardId}">
+                        <span class="toggle-text">📋 Filtres</span>
+                        <span class="toggle-icon">▼</span>
+                    </button>
+                    
+                    <button type="button" 
+                            class="btn btn-sm kanban-clear-filters" 
+                            id="clear-filters-${boardId}"
+                            style="display: none;">
+                        ✖ Effacer
+                    </button>
+                </div>
+                
+                <!-- Panneau de filtres avancés (masqué par défaut) -->
+                <div class="kanban-advanced-filters" 
+                     id="advanced-filters-${boardId}" 
+                     style="display: none;">
+                     
+                    <div class="kanban-filter-group">
+                        <label class="kanban-filter-label">🏷️ Tags</label>
+                        <div class="kanban-tags-filter" id="tags-filter-${boardId}">
+                            <!-- Généré dynamiquement par JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="kanban-filter-group">
+                        <label class="kanban-filter-label">⚡ Priorité</label>
+                        <div class="kanban-priorities-filter" id="priorities-filter-${boardId}">
+                            <label class="kanban-filter-checkbox">
+                                <input type="checkbox" value="high">
+                                <span class="kanban-priority-badge priority-high">🔴 Haute</span>
+                            </label>
+                            <label class="kanban-filter-checkbox">
+                                <input type="checkbox" value="medium">
+                                <span class="kanban-priority-badge priority-medium">🟡 Moyenne</span>
+                            </label>
+                            <label class="kanban-filter-checkbox">
+                                <input type="checkbox" value="normal">
+                                <span class="kanban-priority-badge priority-normal">🟢 Normale</span>
+                            </label>
+                            <label class="kanban-filter-checkbox">
+                                <input type="checkbox" value="low">
+                                <span class="kanban-priority-badge priority-low">🔵 Basse</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="kanban-filter-group">
+                        <label class="kanban-filter-label">👤 Assigné à</label>
+                        <div class="kanban-assignees-filter" id="assignees-filter-${boardId}">
+                            <!-- Généré dynamiquement par JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <div class="kanban-filter-group">
+                        <label class="kanban-filter-label">📅 Échéance</label>
+                        <div class="kanban-date-filter">
+                            <select class="kanban-date-range-select" id="date-filter-${boardId}">
+                                <option value="">Toutes les dates</option>
+                                <option value="overdue">En retard</option>
+                                <option value="today">Aujourd'hui</option>
+                                <option value="tomorrow">Demain</option>
+                                <option value="this-week">Cette semaine</option>
+                                <option value="next-week">Semaine prochaine</option>
+                                <option value="this-month">Ce mois</option>
+                                <option value="next-month">Mois prochain</option>
+                                <option value="no-date">Sans date</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Statut des filtres -->
+                <div class="kanban-filter-status" 
+                     id="filter-status-${boardId}" 
+                     style="display: none;">
+                    <span class="kanban-filter-count"></span>
+                    <div class="kanban-active-filters"></div>
+                </div>
+            </div>
+        </div>`;
     }
 
     // Export functions to global scope for access from HTML
