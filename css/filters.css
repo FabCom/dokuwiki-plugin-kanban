@@ -331,17 +331,8 @@
     display: none;
 }
 
-/* Integration with locked state */
-.kanban-locked-other .kanban-filters-container {
-    opacity: 0.7;
-    pointer-events: none;
-}
-
-.kanban-locked-other .kanban-search-input,
-.kanban-locked-other .kanban-filters-toggle,
-.kanban-locked-other .kanban-clear-filters {
-    cursor: not-allowed;
-}
+/* Note: Filtres et recherche disponibles même en mode verrouillé */
+/* car ils n'modifient pas les données, seulement l'affichage */
 
 /* Loading state */
 .kanban-filters-loading {
@@ -403,4 +394,145 @@
 
 .kanban-column.empty-filtered .kanban-column-header {
     background: #f8f9fa;
+}
+
+/* ===== SORTING HIGHLIGHTS ===== */
+
+/* Sort buttons */
+.kanban-sort-btn {
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.kanban-sort-btn.active {
+    background: #007cba;
+    color: white;
+    border-color: #007cba;
+    box-shadow: 0 2px 4px rgba(0, 124, 186, 0.3);
+}
+
+/* Card highlights */
+.kanban-card.highlight-top {
+    border: 2px solid #ffd700;
+    box-shadow: 0 4px 12px rgba(255, 215, 0, 0.4);
+    background: linear-gradient(135deg, #fff9e6, #ffffff);
+    position: relative;
+}
+
+.kanban-card.highlight-top::before {
+    content: "🏆";
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #ffd700;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    z-index: 10;
+}
+
+.kanban-card.highlight-recent {
+    border: 2px solid #28a745;
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+    background: linear-gradient(135deg, #e8f5e8, #ffffff);
+    position: relative;
+}
+
+.kanban-card.highlight-recent::before {
+    content: "💬";
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #28a745;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    z-index: 10;
+}
+
+.kanban-card.highlight-new {
+    border: 2px solid #17a2b8;
+    box-shadow: 0 4px 12px rgba(23, 162, 184, 0.4);
+    background: linear-gradient(135deg, #e6f3ff, #ffffff);
+    position: relative;
+}
+
+.kanban-card.highlight-new::before {
+    content: "✨";
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #17a2b8;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    z-index: 10;
+}
+
+.kanban-card.highlight-urgent {
+    border: 2px solid #dc3545;
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+    background: linear-gradient(135deg, #ffe6e6, #ffffff);
+    position: relative;
+    animation: urgentPulse 2s infinite;
+}
+
+.kanban-card.highlight-urgent::before {
+    content: "🔥";
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #dc3545;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    z-index: 10;
+}
+
+@keyframes urgentPulse {
+    0%, 100% {
+        box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+    }
+    50% {
+        box-shadow: 0 6px 16px rgba(220, 53, 69, 0.6);
+    }
+}
+
+/* Responsive adjustments for highlights */
+@media (max-width: 768px) {
+    .kanban-card[class*="highlight-"]::before {
+        width: 20px;
+        height: 20px;
+        font-size: 10px;
+        top: -6px;
+        right: -6px;
+    }
+    
+    .btn-group .kanban-sort-btn {
+        font-size: 10px;
+        padding: 3px 6px;
+    }
 }

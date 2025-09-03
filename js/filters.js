@@ -21,8 +21,8 @@ class KanbanFilters {
 
     init() {
         this.toggleInProgress = false; // Flag to prevent double events
+        this.eventsBindingDone = false; // Flag to prevent multiple binding
         this.createFilterUI();
-        this.bindEvents();
         this.extractOriginalData();
         
         // Initialize display - show all cards by default
@@ -67,13 +67,35 @@ class KanbanFilters {
         const filtersContainer = kanbanElement.querySelector('.kanban-filters-container');
         if (!filtersContainer) {
             console.warn('Filters container not found for kanban:', this.kanbanId);
-            console.log('Available elements in kanban:', kanbanElement.innerHTML);
+            console.log('Available elements in kanban:', kanbanElement.innerHTML.substring(0, 200) + '...');
+            
+            // Try again in a moment - the content might still be loading
+            setTimeout(() => {
+                const retryContainer = kanbanElement.querySelector('.kanban-filters-container');
+                if (retryContainer) {
+                    console.log('Filters container found on retry for:', this.kanbanId);
+                    this.populateDynamicFilters();
+                    // Bind events only once
+                    if (!this.eventsBindingDone) {
+                        this.bindEvents();
+                        this.eventsBindingDone = true;
+                    }
+                } else {
+                    console.error('Filters container still not found after retry for:', this.kanbanId);
+                }
+            }, 500);
             return;
         }
 
         console.log('Filters container found for:', this.kanbanId);
         // The HTML is already there, we just need to populate dynamic elements
         this.populateDynamicFilters();
+        
+        // Bind events only once
+        if (!this.eventsBindingDone) {
+            this.bindEvents();
+            this.eventsBindingDone = true;
+        }
     }
 
     /**
@@ -95,6 +117,14 @@ class KanbanFilters {
      */
     bindEvents() {
         console.log('Binding events for kanban:', this.kanbanId); // Debug log
+        
+        // Check if filters container exists before binding
+        const filtersContainer = this.kanbanElement.querySelector('.kanban-filters-container');
+        if (!filtersContainer) {
+            console.warn('Cannot bind events: filters container not found for:', this.kanbanId);
+            return;
+        }
+        
         const searchInput = document.getElementById(`search-${this.kanbanId}`);
         const filtersToggle = document.getElementById(`toggle-filters-${this.kanbanId}`);
         const clearFilters = document.getElementById(`clear-filters-${this.kanbanId}`);
@@ -180,6 +210,60 @@ class KanbanFilters {
                 this.handleFilterChange(e);
             });
         }
+
+        // Sort buttons
+        const sortButtons = this.kanbanElement.querySelectorAll('.kanban-sort-btn');
+        let sortInProgress = false; // Flag to prevent double clicks
+        
+        sortButtons.forEach(button => {
+            button.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Prevent multiple clicks during processing
+                if (sortInProgress) {
+                    console.log('Sort already in progress, ignoring click');
+                    return;
+                }
+                
+                const sortType = button.dataset.sort;
+                
+                // CRITICAL: Save the state BEFORE any async operations
+                const wasActiveBeforeClick = button.classList.contains('active');
+                
+                console.log('Button clicked:', sortType, 'Currently active:', wasActiveBeforeClick); // Debug
+                
+                sortInProgress = true;
+                
+                try {
+                    if (wasActiveBeforeClick) {
+                        // If button was active, deactivate (clear all highlights)
+                        button.classList.remove('active');
+                        this.clearSortHighlights(true); // Hide status when deactivating
+                        this.showSortingResults('Tri désactivé', 0);
+                        console.log('Sort deactivated for:', sortType);
+                    } else {
+                        // Remove active class from all other buttons first
+                        sortButtons.forEach(btn => btn.classList.remove('active'));
+                        
+                        // Activate clicked button immediately
+                        button.classList.add('active');
+                        console.log('Applying sort for:', sortType);
+                        
+                        // Apply sorting - even if this takes time, button state is already set
+                        await this.applySorting(sortType);
+                        console.log('Sort completed for:', sortType);
+                    }
+                } catch (error) {
+                    console.error('Error in sort button handler:', error);
+                    // Reset button state on error
+                    button.classList.remove('active');
+                    this.showSortingResults('❌ Erreur lors du tri', 0);
+                } finally {
+                    sortInProgress = false;
+                }
+            });
+        });
     }
 
     /**
@@ -423,6 +507,10 @@ class KanbanFilters {
                 return dueDate && dueDate >= nextWeekStart && dueDate <= nextWeekEnd;
             case 'this-month':
                 return dueDate && dueDate.getMonth() === today.getMonth() && dueDate.getFullYear() === today.getFullYear();
+            case 'next-month':
+                const nextMonth = new Date(today);
+                nextMonth.setMonth(nextMonth.getMonth() + 1);
+                return dueDate && dueDate.getMonth() === nextMonth.getMonth() && dueDate.getFullYear() === nextMonth.getFullYear();
             case 'no-date':
                 return !dueDate;
             default:
@@ -611,6 +699,354 @@ class KanbanFilters {
             filteredCount: this.countTotalCards(this.filteredData),
             totalCount: this.countTotalCards(this.originalData)
         };
+    }
+
+    /**
+     * Apply sorting to cards based on the selected criteria
+     */
+    async applySorting(sortType) {
+        // Show loading indicator for potentially slow operations
+        if (sortType === 'most-commented' || sortType === 'last-commented') {
+            this.showSortingResults('⏳ Chargement des commentaires...', 0);
+        } else {
+            this.showSortingResults('⏳ Tri en cours...', 0);
+        }
+        
+        // Clear previous highlighting
+        this.clearSortHighlights(false); // Don't hide status, we'll update it
+
+        try {
+            switch (sortType) {
+                case 'most-commented':
+                    await this.highlightMostCommented();
+                    break;
+                case 'last-commented':
+                    await this.highlightLastCommented();
+                    break;
+                case 'last-modified':
+                    this.highlightLastModified();
+                    break;
+                case 'urgent':
+                    this.highlightUrgent();
+                    break;
+                default:
+                    console.warn('Unknown sort type:', sortType);
+                    this.showSortingResults('❌ Type de tri inconnu', 0);
+            }
+        } catch (error) {
+            console.error('Error in sorting:', error);
+            this.showSortingResults('❌ Erreur lors du tri', 0);
+            throw error; // Re-throw to be handled by caller
+        }
+    }
+
+    /**
+     * Clear all sort highlights from cards
+     */
+    clearSortHighlights(hideStatus = false) {
+        const allCards = this.kanbanElement.querySelectorAll('.kanban-card');
+        allCards.forEach(card => {
+            card.classList.remove('highlight-top', 'highlight-recent', 'highlight-new', 'highlight-urgent');
+        });
+        
+        // Only hide sorting status if explicitly requested (for deactivation)
+        if (hideStatus) {
+            const statusContainer = document.getElementById(`filter-status-${this.kanbanId}`);
+            if (statusContainer) {
+                statusContainer.style.display = 'none';
+            }
+        }
+    }
+
+    /**
+     * Highlight the top 3 most commented cards (optimized version)
+     */
+    async highlightMostCommented() {
+        if (!this.originalData || !this.originalData.columns) return;
+
+        console.log('highlightMostCommented: Starting...'); // Debug
+        
+        // Get current page ID
+        const pageId = window.JSINFO?.id || 'playground:kanban';
+        console.log('highlightMostCommented: Page ID =', pageId); // Debug
+        
+        // Collect all cards with their comment counts using parallel processing
+        const cardsToCheck = [];
+        this.originalData.columns.forEach(column => {
+            if (column.cards) {
+                column.cards.forEach(card => {
+                    cardsToCheck.push(card);
+                });
+            }
+        });
+        
+        // Use Promise.all to check all cards in parallel
+        const cardPromises = cardsToCheck.map(async (card) => {
+            let commentCount = 0;
+            
+            // First try embedded comment data (fastest)
+            if (card.comments && Array.isArray(card.comments)) {
+                commentCount = card.comments.length;
+            } else if (card.comment_count) {
+                commentCount = parseInt(card.comment_count) || 0;
+            } else if (card.commentCount) {
+                commentCount = parseInt(card.commentCount) || 0;
+            } else {
+                // Only check API if card might have comments
+                const cardElement = document.getElementById(card.id);
+                const hasDiscussionIndicator = cardElement && cardElement.querySelector('.discussion-count');
+                
+                if (hasDiscussionIndicator) {
+                    // Use discussions API to get comment count
+                    if (window.KanbanDiscussions && window.KanbanDiscussions.getDiscussionCount) {
+                        try {
+                            commentCount = await window.KanbanDiscussions.getDiscussionCount(pageId, card.id);
+                        } catch (error) {
+                            console.log('highlightMostCommented: API error for card:', card.id, error);
+                            commentCount = 0;
+                        }
+                    }
+                }
+            }
+            
+            return { 
+                id: card.id, 
+                commentCount: commentCount 
+            };
+        });
+
+        // Wait for all card checks to complete
+        const cardsWithComments = await Promise.all(cardPromises);
+        console.log('highlightMostCommented: Results =', cardsWithComments); // Debug
+
+        // Sort by comment count (descending) and take top 3
+        const top3 = cardsWithComments
+            .filter(card => card.commentCount > 0) // Only cards with comments
+            .sort((a, b) => b.commentCount - a.commentCount)
+            .slice(0, 3);
+
+        console.log('highlightMostCommented: Top 3 =', top3); // Debug
+
+        // Highlight top 3 cards
+        top3.forEach(card => {
+            const cardElement = document.getElementById(card.id);
+            if (cardElement) {
+                cardElement.classList.add('highlight-top');
+            }
+        });
+
+        this.showSortingResults(`Top 3 cartes les plus commentées`, top3.length);
+    }    /**
+     * Highlight the last commented card (optimized version)
+     */
+    async highlightLastCommented() {
+        if (!this.originalData || !this.originalData.columns) return;
+        
+        // Get current page ID
+        const pageId = window.JSINFO?.id || 'playground:kanban';
+        
+        let lastCommentedCard = null;
+        let lastCommentDate = null;
+
+        // Create array of cards to check
+        const cardsToCheck = [];
+        this.originalData.columns.forEach(column => {
+            if (column.cards) {
+                column.cards.forEach(card => {
+                    cardsToCheck.push(card);
+                });
+            }
+        });
+
+        // Use Promise.all to check all cards in parallel for better performance
+        const cardPromises = cardsToCheck.map(async (card) => {
+            let mostRecentDate = null;
+            
+            // Try different comment property names first (fast check)
+            if (card.comments && Array.isArray(card.comments) && card.comments.length > 0) {
+                const mostRecentComment = card.comments
+                    .filter(comment => comment.date || comment.timestamp)
+                    .sort((a, b) => {
+                        const dateA = new Date(a.date || a.timestamp);
+                        const dateB = new Date(b.date || b.timestamp);
+                        return dateB - dateA;
+                    })[0];
+                
+                if (mostRecentComment) {
+                    mostRecentDate = mostRecentComment.date || mostRecentComment.timestamp;
+                }
+            } else if (card.lastComment) {
+                mostRecentDate = card.lastComment.date || card.lastComment;
+            } else {
+                // Only use API as fallback and only if we think there might be comments
+                // Check if card has discussion indicator
+                const cardElement = document.getElementById(card.id);
+                const hasDiscussionIndicator = cardElement && cardElement.querySelector('.discussion-count');
+                
+                if (hasDiscussionIndicator || card.comment_count > 0) {
+                    try {
+                        // Use lightweight check first - just get the count
+                        const discussionCount = await window.KanbanDiscussions.getDiscussionCount(pageId, card.id);
+                        
+                        if (discussionCount > 0) {
+                            // Only load full discussions if there are actually comments
+                            const discussions = await window.KanbanDiscussions.loadCardDiscussions(pageId, card.id);
+                            
+                            if (discussions && discussions.length > 0) {
+                                const sortedDiscussions = discussions
+                                    .filter(d => d.timestamp || d.date)
+                                    .sort((a, b) => {
+                                        const dateA = new Date(a.timestamp || a.date);
+                                        const dateB = new Date(b.timestamp || b.date);
+                                        return dateB - dateA;
+                                    });
+                                
+                                if (sortedDiscussions.length > 0) {
+                                    mostRecentDate = sortedDiscussions[0].timestamp || sortedDiscussions[0].date;
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.log('highlightLastCommented: Error getting discussions for card:', card.id, error);
+                    }
+                }
+            }
+            
+            return {
+                card: card,
+                date: mostRecentDate ? new Date(mostRecentDate) : null
+            };
+        });
+
+        // Wait for all card checks to complete
+        const results = await Promise.all(cardPromises);
+        console.log('highlightLastCommented: All results =', results); // Debug
+        
+        // Find the card with the most recent comment
+        results.forEach(result => {
+            if (result.date && (!lastCommentDate || result.date > lastCommentDate)) {
+                lastCommentDate = result.date;
+                lastCommentedCard = result.card;
+                console.log('highlightLastCommented: New most recent card =', result.card.id, 'date =', result.date); // Debug
+            }
+        });
+
+        console.log('highlightLastCommented: Final result - card:', lastCommentedCard?.id, 'date:', lastCommentDate); // Debug
+
+        if (lastCommentedCard) {
+            const cardElement = document.getElementById(lastCommentedCard.id);
+            if (cardElement) {
+                cardElement.classList.add('highlight-recent');
+                console.log('highlightLastCommented: Highlighted card', lastCommentedCard.id); // Debug
+            } else {
+                console.log('highlightLastCommented: Card element not found for', lastCommentedCard.id); // Debug
+            }
+            this.showSortingResults(`Dernière carte commentée`, 1);
+        } else {
+            console.log('highlightLastCommented: No commented cards found'); // Debug
+            this.showSortingResults(`Aucune carte avec commentaires`, 0);
+        }
+        
+        console.log('highlightLastCommented: Completed'); // Debug
+    }
+
+    /**
+     * Highlight the 3 last modified cards
+     */
+    highlightLastModified() {
+        if (!this.originalData || !this.originalData.columns) return;
+
+        // Collect all cards with modification dates
+        const cardsWithDates = [];
+        this.originalData.columns.forEach(column => {
+            if (column.cards) {
+                column.cards.forEach(card => {
+                    // Try different modification date properties
+                    let modifiedDate = null;
+                    
+                    if (card.lastModified) {
+                        modifiedDate = new Date(card.lastModified);
+                    } else if (card.modified) {
+                        modifiedDate = new Date(card.modified);
+                    } else if (card.updated) {
+                        modifiedDate = new Date(card.updated);
+                    } else if (card.created) {
+                        // Fallback to creation date if no modification date
+                        modifiedDate = new Date(card.created);
+                    }
+                    
+                    if (modifiedDate && !isNaN(modifiedDate)) {
+                        cardsWithDates.push({ 
+                            id: card.id, 
+                            modifiedDate: modifiedDate 
+                        });
+                    }
+                });
+            }
+        });
+
+        // Sort by modification date (descending) and take top 3
+        const last3Modified = cardsWithDates
+            .sort((a, b) => b.modifiedDate - a.modifiedDate)
+            .slice(0, 3);
+
+        // Highlight last 3 modified cards
+        last3Modified.forEach(card => {
+            const cardElement = document.getElementById(card.id);
+            if (cardElement) {
+                cardElement.classList.add('highlight-new'); // Reuse the same highlight class
+            }
+        });
+
+        this.showSortingResults(`3 dernières cartes modifiées`, last3Modified.length);
+    }
+
+    /**
+     * Highlight urgent cards (high priority + due soon)
+     */
+    highlightUrgent() {
+        if (!this.originalData || !this.originalData.columns) return;
+
+        const today = new Date();
+        const threeDaysFromNow = new Date();
+        threeDaysFromNow.setDate(today.getDate() + 3);
+        
+        let count = 0;
+        this.originalData.columns.forEach(column => {
+            if (column.cards) {
+                column.cards.forEach(card => {
+                    const isHighPriority = card.priority === 'high';
+                    const dueDate = card.dueDate ? new Date(card.dueDate) : null;
+                    const isDueSoon = dueDate && dueDate <= threeDaysFromNow;
+                    const isOverdue = dueDate && dueDate < today;
+
+                    if (isHighPriority || isDueSoon || isOverdue) {
+                        const cardElement = document.getElementById(card.id);
+                        if (cardElement) {
+                            cardElement.classList.add('highlight-urgent');
+                            count++;
+                        }
+                    }
+                });
+            }
+        });
+
+        this.showSortingResults(`Cartes urgentes`, count);
+    }
+
+    /**
+     * Show sorting results in the filter status
+     */
+    showSortingResults(message, count) {
+        const statusContainer = document.getElementById(`filter-status-${this.kanbanId}`);
+        if (statusContainer) {
+            statusContainer.style.display = 'block';
+            statusContainer.innerHTML = `
+                <span class="kanban-filter-count">
+                    📊 ${message}: ${count} carte(s)
+                </span>
+            `;
+        }
     }
 }
 

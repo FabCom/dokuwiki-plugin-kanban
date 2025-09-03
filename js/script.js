@@ -753,16 +753,40 @@
                 return;
             }
             
-            setTimeout(() => {
-                const filtersInstance = new window.KanbanFilters(boardId);
-                filtersInstance.initialize();
-                
-                // Store filters instance for later access
-                if (!window.kanbanFiltersInstances) {
-                    window.kanbanFiltersInstances = {};
+            // Initialize filters instance storage if needed
+            if (!window.kanbanFiltersInstances) {
+                window.kanbanFiltersInstances = {};
+            }
+            
+            // Mark as initializing to prevent concurrent initialization
+            window.kanbanFiltersInstances[boardId] = 'initializing';
+            
+            // Wait for filters container to be available
+            let initAttempts = 0;
+            const maxAttempts = 20; // Max 4 seconds (20 * 200ms)
+            
+            const initializeFiltersWhenReady = () => {
+                initAttempts++;
+                const filtersContainer = board.querySelector('.kanban-filters-container');
+                if (filtersContainer) {
+                    console.log('Initializing filters for board:', boardId, 'after', initAttempts, 'attempts');
+                    const filtersInstance = new window.KanbanFilters(boardId);
+                    filtersInstance.initialize();
+                    
+                    // Store actual filters instance for later access
+                    window.kanbanFiltersInstances[boardId] = filtersInstance;
+                } else if (initAttempts < maxAttempts) {
+                    // Container not ready yet, try again
+                    setTimeout(initializeFiltersWhenReady, 200);
+                } else {
+                    console.error('Failed to initialize filters for board:', boardId, 'after', maxAttempts, 'attempts');
+                    // Remove the 'initializing' marker on failure
+                    delete window.kanbanFiltersInstances[boardId];
                 }
-                window.kanbanFiltersInstances[boardId] = filtersInstance;
-            }, 100);
+            };
+            
+            // Start checking for filters container
+            setTimeout(initializeFiltersWhenReady, 100);
         } else {
             console.warn('KanbanFilters module not available');
         }
@@ -1048,6 +1072,34 @@
                             style="display: none;">
                         ✖ Effacer
                     </button>
+                    
+                    <!-- Boutons de tri avancés -->
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" 
+                                class="btn btn-outline-secondary kanban-sort-btn"
+                                data-sort="most-commented"
+                                title="3 cartes les plus commentées">
+                            💬 Top 3
+                        </button>
+                        <button type="button" 
+                                class="btn btn-outline-secondary kanban-sort-btn"
+                                data-sort="last-commented"
+                                title="Dernière carte commentée">
+                            🗨️ Récent
+                        </button>
+                        <button type="button" 
+                                class="btn btn-outline-secondary kanban-sort-btn"
+                                data-sort="last-modified"
+                                title="3 dernières cartes modifiées">
+                            📝 Modifiées
+                        </button>
+                        <button type="button" 
+                                class="btn btn-outline-secondary kanban-sort-btn"
+                                data-sort="urgent"
+                                title="Cartes urgentes (priorité haute + échéance proche)">
+                            🔥 Urgent
+                        </button>
+                    </div>
                 </div>
                 
                 <!-- Panneau de filtres avancés (masqué par défaut) -->
