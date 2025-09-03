@@ -138,14 +138,24 @@ $renderer->doc .= 'JSINFO.kanban_user = ' . json_encode($currentUser) . ';';
 
 ---
 
-### [ ] 6. Gestion d'erreurs incohérente
+### [✅] 6. Gestion d'erreurs incohérente
 **Risque**: Fuite d'informations sensibles  
 **Impact**: 🔶 MODÉRÉ - Information disclosure  
 
-**Actions requises**:
-- [ ] Standardiser les messages d'erreur
-- [ ] Masquer les détails techniques en production
-- [ ] Implémenter un logging centralisé
+**Actions complétées**:
+- [✅] KanbanErrorManager créé pour standardiser toutes les réponses d'erreur
+- [✅] Messages d'erreur cohérents avec format JSON standardisé
+- [✅] Masquage automatique des détails techniques en production
+- [✅] Logging centralisé sécurisé avec niveaux (INFO/WARNING/ERROR/SECURITY/CRITICAL)
+- [✅] Codes d'erreur structurés pour debugging en développement uniquement
+- [✅] Détection automatique mode production vs développement
+- [✅] Réponses HTTP appropriées (401, 403, 400, 500) selon le type d'erreur
+- [✅] Intégration dans action.php : validation auth, permissions, données
+- [✅] Handler d'exceptions global pour les erreurs non capturées
+- [✅] Statistiques d'erreurs pour monitoring
+
+**Date de correction**: 3 septembre 2025  
+**Status**: ✅ ERREURS STANDARDISÉES - Système centralisé implémenté, fuites évitées
 
 ---
 

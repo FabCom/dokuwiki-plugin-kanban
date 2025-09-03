@@ -23,9 +23,13 @@ class action_plugin_kanban extends ActionPlugin
         require_once(dirname(__FILE__) . '/KanbanLockManager.php');
         require_once(dirname(__FILE__) . '/KanbanAuthManager.php');
         require_once(dirname(__FILE__) . '/KanbanSecurityPolicy.php');
+        require_once(dirname(__FILE__) . '/KanbanErrorManager.php');
         
         // Initialize lock manager
         $this->lockManager = new KanbanLockManager();
+        
+        // Set exception handler for this plugin
+        set_exception_handler([KanbanErrorManager::class, 'handleException']);
     }
     /**
      * Registers a callback function for a given event
@@ -334,12 +338,17 @@ class action_plugin_kanban extends ActionPlugin
                     $this->saveCardDiscussions();
                     break;
                 default:
-                    http_response_code(400);
-                    echo json_encode(['error' => 'Action non reconnue']);
+                    KanbanErrorManager::sendResponse(false, 'Action non reconnue', [], 'UNKNOWN_ACTION', 400);
             }
         } catch (Exception $e) {
-            http_response_code(500);
-            echo json_encode(['error' => $e->getMessage()]);
+            KanbanErrorManager::logError('AJAX exception', [
+                'action' => $action ?? 'unknown',
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            KanbanErrorManager::sendServerError($e->getMessage());
         }
         
         exit;
@@ -371,9 +380,8 @@ class action_plugin_kanban extends ActionPlugin
         
         // SECURITY: Validate authentication before any write operation
         if (!$this->validateAuthentication()) {
-            error_log("Kanban SECURITY: Save operation denied - authentication failed");
-            http_response_code(401);
-            echo json_encode(['error' => 'Authentication required']);
+            KanbanErrorManager::logSecurity('Save operation denied - authentication failed');
+            KanbanErrorManager::sendAuthError();
             return;
         }
         
@@ -384,47 +392,56 @@ class action_plugin_kanban extends ActionPlugin
         
         // SECURITY: Validate all required parameters
         if (empty($boardId) || empty($boardData) || empty($pageId)) {
-            error_log("Kanban SECURITY: Save operation denied - missing required data. User: " . 
-                     ($this->getCurrentUser() ?? 'unknown') . ", IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
-            http_response_code(400);
-            echo json_encode(['error' => 'Données manquantes (ID page, board ID ou données)']);
+            KanbanErrorManager::logSecurity('Save operation denied - missing required data', [
+                'user' => $this->getCurrentUser(),
+                'has_board_id' => !empty($boardId),
+                'has_board_data' => !empty($boardData),
+                'has_page_id' => !empty($pageId)
+            ]);
+            KanbanErrorManager::sendValidationError('required_fields', 'board_id, board_data, page_id required');
             return;
         }
         
         // SECURITY: Validate page ID format
         if (!preg_match('/^[a-zA-Z0-9:_-]+$/', $pageId)) {
-            error_log("Kanban SECURITY: Invalid page ID format: $pageId");
-            http_response_code(400);
-            echo json_encode(['error' => 'Format d\'ID de page invalide']);
+            KanbanErrorManager::logSecurity('Invalid page ID format', ['page_id' => $pageId]);
+            KanbanErrorManager::sendValidationError('page_id', 'Invalid format');
             return;
         }
         
         // Parse board data
         $data = json_decode($boardData, true);
         if (!$data) {
-            error_log("Kanban Plugin: Invalid JSON data: $boardData");
-            http_response_code(400);
-            echo json_encode(['error' => 'Données JSON invalides']);
+            KanbanErrorManager::logWarning('Invalid JSON data in save operation', [
+                'board_data' => substr($boardData, 0, 200) . '...' // Truncate for log
+            ]);
+            KanbanErrorManager::sendValidationError('board_data', 'Invalid JSON format');
             return;
         }
         
-        // Debug: Log des données décodées
-        error_log("Kanban Debug - Données reçues et décodées: " . print_r($data, true));
+        // Debug: Log des données décodées (only in development)
+        KanbanErrorManager::logInfo('Board data received', [
+            'board_id' => $boardId,
+            'page_id' => $pageId,
+            'change_type' => $changeType,
+            'data_size' => strlen($boardData)
+        ]);
         
         // SECURITY: Check permissions using centralized auth manager
         if (!KanbanAuthManager::canEdit($pageId)) {
-            error_log("Kanban SECURITY: Save denied - insufficient edit permissions for page: $pageId");
-            http_response_code(403);
-            echo json_encode(['error' => 'Permissions insuffisantes pour éditer cette page']);
+            KanbanErrorManager::logSecurity('Save denied - insufficient edit permissions', [
+                'page_id' => $pageId,
+                'user' => $this->getCurrentUser()
+            ]);
+            KanbanErrorManager::sendAuthorizationError($pageId);
             return;
         }
         
         // Save to page content using DokuWiki versioning
         if ($this->saveToPageContent($pageId, $boardId, $data, $changeType)) {
-            echo json_encode(['success' => true, 'message' => 'Tableau sauvegardé avec versioning']);
+            KanbanErrorManager::sendResponse(true, 'Tableau sauvegardé avec versioning');
         } else {
-            http_response_code(500);
-            echo json_encode(['error' => 'Erreur lors de la sauvegarde']);
+            KanbanErrorManager::sendServerError('Save operation failed', 'Erreur lors de la sauvegarde');
         }
     }
 
@@ -729,9 +746,8 @@ class action_plugin_kanban extends ActionPlugin
         
         // SECURITY: Validate authentication for lock operations
         if (!$this->validateAuthentication()) {
-            error_log("Kanban SECURITY: Lock operation denied - authentication failed");
-            http_response_code(401);
-            echo json_encode(['error' => 'Authentication required']);
+            KanbanErrorManager::logSecurity('Lock operation denied - authentication failed');
+            KanbanErrorManager::sendAuthError();
             return;
         }
         
@@ -739,47 +755,42 @@ class action_plugin_kanban extends ActionPlugin
         
         // SECURITY: Validate page ID
         if (empty($pageId) || !preg_match('/^[a-zA-Z0-9:_-]+$/', $pageId)) {
-            error_log("Kanban SECURITY: Invalid page ID for lock: $pageId");
-            http_response_code(400);
-            echo json_encode(['error' => 'ID de page manquant ou invalide']);
+            KanbanErrorManager::logSecurity('Invalid page ID for lock operation', ['page_id' => $pageId]);
+            KanbanErrorManager::sendValidationError('page_id', 'Invalid page ID format');
             return;
         }
         
         // Get authenticated user
         $currentUser = $this->getCurrentUser();
         if (!$currentUser) {
-            error_log("Kanban SECURITY: Lock denied - no valid user");
-            http_response_code(401);
-            echo json_encode(['error' => 'Utilisateur non authentifié']);
+            KanbanErrorManager::logSecurity('Lock denied - no valid user');
+            KanbanErrorManager::sendAuthError('Utilisateur non authentifié');
             return;
         }
         
         // SECURITY: Check write permissions using centralized auth manager
         if (!KanbanAuthManager::canEdit($pageId)) {
-            error_log("Kanban SECURITY: Lock denied - insufficient edit permissions for page: $pageId");
-            http_response_code(403);
-            echo json_encode(['error' => 'Permissions insuffisantes pour éditer cette page']);
+            KanbanErrorManager::logSecurity('Lock denied - insufficient edit permissions', [
+                'page_id' => $pageId,
+                'user' => $currentUser
+            ]);
+            KanbanErrorManager::sendAuthorizationError($pageId);
             return;
         }
-        
         // Use atomic lock manager
         $result = $this->lockManager->acquireLock($pageId, $currentUser);
         
         if ($result['success']) {
-            echo json_encode([
-                'success' => true,
-                'message' => 'Board verrouillé pour édition',
+            KanbanErrorManager::sendResponse(true, 'Board verrouillé pour édition', [
                 'locked' => true,
                 'locked_by' => $currentUser,
                 'lock_type' => $result['lock_type'] ?? 'atomic',
                 'expires_at' => $result['expires_at'] ?? null
             ]);
         } else {
-            http_response_code(409);
-            echo json_encode([
-                'error' => $result['error'],
+            KanbanErrorManager::sendResponse(false, $result['error'], [
                 'locked' => true
-            ]);
+            ], 'LOCK_CONFLICT', 409);
         }
     }
 
