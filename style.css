@@ -4158,3 +4158,248 @@ body.kanban-fullscreen-active #dokuwiki__content {
         justify-content: center;
     }
 }
+
+/* ===== KANBAN VIEW STYLES (pour inclusion) ===== */
+
+/* Container principal des vues kanban */
+.kanban-view {
+    margin: 15px 0;
+    overflow: hidden;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    background: #f8f9fa;
+}
+
+/* Titre de la vue */
+.kanban-view-title {
+    background: #6c757d;
+    color: white;
+    margin: 0;
+    padding: 10px 15px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* Message de chargement */
+.kanban-view-loading {
+    padding: 20px;
+    text-align: center;
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Message d'erreur */
+.kanban-view-error {
+    padding: 15px;
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    margin: 10px;
+}
+
+/* Affichage en ligne pour les colonnes uniques */
+.kanban-view.single-column .kanban-columns {
+    flex-direction: column;
+    gap: 0;
+}
+
+.kanban-view.single-column .kanban-column {
+    min-width: auto;
+    width: 100%;
+    max-height: none;
+}
+
+.kanban-view.single-column .kanban-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    padding: 15px;
+    overflow: visible;
+}
+
+.kanban-view.single-column .kanban-card {
+    flex: 1 1 calc(33.333% - 10px);
+    min-width: 280px;
+    max-width: 350px;
+    margin-bottom: 0;
+}
+
+/* Affichage compact pour les cartes seules */
+.kanban-view.single-card .kanban-columns {
+    flex-direction: column;
+    gap: 0;
+}
+
+.kanban-view.single-card .kanban-column {
+    min-width: auto;
+    width: 100%;
+    max-height: none;
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+}
+
+.kanban-view.single-card .kanban-column-header {
+    display: none;
+}
+
+.kanban-view.single-card .kanban-cards {
+    padding: 0;
+    background: transparent;
+}
+
+.kanban-view.single-card .kanban-card {
+    margin-bottom: 0;
+    width: 100%;
+    max-width: none;
+}
+
+/* Responsive design pour les vues */
+@media (max-width: 768px) {
+    .kanban-view.single-column .kanban-card {
+        flex: 1 1 100%;
+        min-width: auto;
+        max-width: none;
+    }
+    
+    .kanban-view.single-column .kanban-cards {
+        flex-direction: column;
+        gap: 12px;
+    }
+}
+
+/* Container du contenu */
+.kanban-view-content {
+    padding: 15px;
+    background: white;
+}
+
+/* Wrappers pour les vues uniques */
+.kanban-view-single-column .kanban-column {
+    max-width: none;
+    width: 100%;
+    max-height: 500px; /* Limiter la hauteur pour éviter les vues trop longues */
+}
+
+.kanban-view-single-card {
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+/* Styles pour l'affichage inline de carte unique */
+.kanban-view.single-card {
+    display: flex;
+    align-items: center; /* Centrage vertical */
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.kanban-view.single-card .kanban-view-title {
+    margin: 0;
+    flex-shrink: 0;
+    min-width: 200px;
+}
+
+.kanban-view.single-card .kanban-view-content {
+    flex: 1;
+    min-width: 300px;
+    padding: 0;
+    background: transparent;
+}
+
+.kanban-view.single-card .kanban-board {
+    margin: 0;
+}
+
+.kanban-view.single-card .kanban-columns {
+    margin: 0;
+}
+
+.kanban-view.single-card .kanban-column {
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+}
+
+.kanban-view.single-card .kanban-cards {
+    margin: 0;
+    padding: 0;
+}
+
+.kanban-view.single-card .kanban-card {
+    margin: 0;
+    width: 100%;
+    min-width: 300px;
+}
+
+/* Indicateurs de contenu dans les vues */
+.kanban-view .kanban-card-indicators {
+    display: flex;
+    gap: 6px;
+    margin: 8px 0;
+    flex-wrap: wrap;
+}
+
+.kanban-view .kanban-content-indicator {
+    font-size: 11px;
+    background: #e9ecef;
+    color: #495057;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.kanban-view .kanban-discussion-indicator {
+    font-size: 11px;
+    background: #d1ecf1;
+    color: #0c5460;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+/* Style pour les cartes cliquables dans les vues */
+.kanban-view .kanban-card[style*="cursor: pointer"]:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    transform: translateY(-1px);
+}
+
+/* Désactiver les interactions pour le mode readonly */
+.kanban-read-only .kanban-card {
+    cursor: default;
+}
+
+.kanban-read-only .kanban-card:hover {
+    transform: none; /* Pas d'effet hover en readonly */
+}
+
+.kanban-read-only .kanban-card-title,
+.kanban-read-only .kanban-card-description {
+    cursor: default;
+}
+
+/* Responsive pour les vues */
+@media (max-width: 768px) {
+    .kanban-view .kanban-columns {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .kanban-view .kanban-column {
+        min-width: auto;
+        max-height: 300px; /* Plus petit sur mobile */
+    }
+    
+    .kanban-view-content {
+        padding: 10px;
+    }
+    
+    .kanban-view-single-card {
+        max-width: none;
+    }
+}

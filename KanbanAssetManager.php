@@ -23,7 +23,7 @@ class KanbanAssetManager
         if (empty($ID)) return;
         
         $content = rawWiki($ID);
-        if (!$content || strpos($content, '<kanban') === false) {
+        if (!$content || (strpos($content, '<kanban') === false && strpos($content, '<kanbanview') === false)) {
             return;
         }
         
@@ -106,6 +106,12 @@ class KanbanAssetManager
         $event->data['script'][] = [
             'type' => 'text/javascript',
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-main.js'
+        ];
+        
+        // KanbanView for inclusion support
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/kanban-view.js'
         ];
         
         // Core functionality scripts
