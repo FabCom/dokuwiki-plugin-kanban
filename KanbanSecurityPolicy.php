@@ -56,8 +56,8 @@ class KanbanSecurityPolicy
         if ($strict) {
             // Strict CSP - only nonces and specific domains
             $csp = "default-src 'self'; " .
-                   "script-src 'self' " . implode(' ', $nonceList) . "; " .
-                   "style-src 'self' 'unsafe-inline'; " .
+                   "script-src 'self' https://cdn.jsdelivr.net " . implode(' ', $nonceList) . "; " .
+                   "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " .
                    "img-src 'self' data: blob:; " .
                    "connect-src 'self'; " .
                    "font-src 'self'; " .
@@ -65,8 +65,9 @@ class KanbanSecurityPolicy
                    "base-uri 'self'; " .
                    "form-action 'self'";
         } else {
-            // Relaxed CSP - compatible with DokuWiki
-            $csp = "script-src 'self' 'unsafe-inline' " . implode(' ', $nonceList) . "; " .
+            // Relaxed CSP - compatible with DokuWiki and QuillJS
+            $csp = "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net " . implode(' ', $nonceList) . "; " .
+                   "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " .
                    "object-src 'none'; " .
                    "base-uri 'self'";
         }
