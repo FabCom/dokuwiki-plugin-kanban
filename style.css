@@ -3774,7 +3774,9 @@ body.kanban-fullscreen-active #dokuwiki__content {
 .kanban-board.kanban-fullscreen .kanban-columns {
     gap: 25px;
     padding-bottom: 20px;
-    min-height: calc(100vh - 120px);
+    min-height: 85vh !important;
+    display: flex;
+    overflow-x: auto;
 }
 
 /* Fullscreen columns sizing */
@@ -3782,7 +3784,30 @@ body.kanban-fullscreen-active #dokuwiki__content {
     min-width: 320px;
     flex: 1;
     max-width: none;
-    max-height: calc(100vh - 140px);
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+/* Responsive adjustments for fullscreen mode */
+@media (max-width: 768px) {
+    .kanban-board.kanban-fullscreen .kanban-columns {
+        min-height: 90vh !important;
+    }
+    
+    .kanban-board.kanban-fullscreen .kanban-column {
+        min-width: 280px;
+        max-height: 85vh;
+    }
+}
+
+@media (max-height: 600px) {
+    .kanban-board.kanban-fullscreen .kanban-columns {
+        min-height: 95vh !important;
+    }
+    
+    .kanban-board.kanban-fullscreen .kanban-column {
+        max-height: 90vh;
+    }
 }
 
 /* Fullscreen read-only indicator - higher z-index to appear above sticky actions */
@@ -3836,11 +3861,13 @@ body.kanban-fullscreen-active #dokuwiki__content {
     .kanban-board.kanban-fullscreen .kanban-columns {
         gap: 15px;
         flex-direction: column;
+        min-height: calc(100vh - 180px) !important;
     }
     
     .kanban-board.kanban-fullscreen .kanban-column {
         min-width: auto;
         max-height: none;
+        display: block !important;
     }
     
     .kanban-board.kanban-fullscreen .kanban-title {
@@ -4241,7 +4268,7 @@ body.kanban-fullscreen-active #dokuwiki__content {
     border-radius: 0;
 }
 
-.kanban-view.single-card .kanban-column-header {
+.kanban-view.single-card .kanban-view-content .kanban-column-header {
     display: none;
 }
 
@@ -4294,6 +4321,11 @@ body.kanban-fullscreen-active #dokuwiki__content {
     align-items: center; /* Centrage vertical */
     gap: 15px;
     flex-wrap: wrap;
+}
+
+/* Assurer que les kanban fullscreen normaux ne sont pas affectés */
+.kanban-board.kanban-fullscreen .kanban-column-header {
+    display: block !important;
 }
 
 .kanban-view.single-card .kanban-view-title {
@@ -4383,14 +4415,14 @@ body.kanban-fullscreen-active #dokuwiki__content {
     cursor: default;
 }
 
-/* Responsive pour les vues */
+/* Responsive pour les vues kanbanview uniquement */
 @media (max-width: 768px) {
-    .kanban-view .kanban-columns {
+    .kanban-view-content .kanban-columns {
         flex-direction: column;
         gap: 10px;
     }
     
-    .kanban-view .kanban-column {
+    .kanban-view-content .kanban-column {
         min-width: auto;
         max-height: 300px; /* Plus petit sur mobile */
     }
