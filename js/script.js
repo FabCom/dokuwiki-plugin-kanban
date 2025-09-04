@@ -217,6 +217,12 @@
             }
         }
         
+        // Bouton d'export CSV - toujours visible
+        html += `
+            <button class="kanban-btn kanban-btn-info kanban-export-csv-btn" onclick="window.KanbanPlugin.exportToCSV('${boardContainer.id}')" title="Exporter en CSV pour tableur">
+                📊 CSV
+            </button>`;
+        
         html += `</div>`;
         html += `</div>`;
         
@@ -1534,8 +1540,76 @@
         </div>`;
     }
 
+    /**
+     * Export kanban board to CSV
+     */
+    function exportToCSV(boardId) {
+        console.log('exportToCSV called with boardId:', boardId);
+        
+        const boardElement = document.getElementById(boardId);
+        if (!boardElement) {
+            showNotification('Tableau non trouvé', 'error');
+            return;
+        }
+
+        // Extract the real board ID from the element dataset or from the boardId string
+        let realBoardId = boardElement.dataset.boardId;
+        if (!realBoardId) {
+            // Extract from boardId like "kanban-board-xyz" -> "xyz"
+            realBoardId = boardId.replace('kanban-board-', '').replace('kanban_', '');
+        }
+        
+        console.log('Real board ID for export:', realBoardId);
+        
+        const loadingBtn = boardElement.querySelector('.kanban-export-csv-btn');
+        if (loadingBtn) {
+            loadingBtn.disabled = true;
+            loadingBtn.innerHTML = '⏳ Génération...';
+        }
+        
+        // Get current page ID
+        const pageId = window.JSINFO && window.JSINFO.id ? window.JSINFO.id : '';
+        
+        // Create a form to download the CSV
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = DOKU_BASE + 'lib/exe/ajax.php';
+        form.target = '_blank';
+        
+        // Add form fields
+        const fields = {
+            call: 'kanban',
+            action: 'export_csv',
+            board_id: realBoardId,
+            id: pageId
+        };
+        
+        for (const [key, value] of Object.entries(fields)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value;
+            form.appendChild(input);
+        }
+        
+        // Submit form
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+        
+        // Reset button after delay
+        setTimeout(() => {
+            if (loadingBtn) {
+                loadingBtn.disabled = false;
+                loadingBtn.innerHTML = '📊 CSV';
+            }
+            showNotification('Export CSV lancé', 'success');
+        }, 1000);
+    }
+
     // Export functions to global scope for access from HTML
     window.KanbanPlugin = window.KanbanPlugin || {};
     window.KanbanPlugin.toggleFullscreen = toggleFullscreen;
+    window.KanbanPlugin.exportToCSV = exportToCSV;
 
 })();

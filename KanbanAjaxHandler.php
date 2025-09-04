@@ -100,6 +100,9 @@ class KanbanAjaxHandler
                 case 'create_board_from_template':
                     $this->createBoardFromTemplate();
                     break;
+                case 'export_csv':
+                    $this->exportToCSV();
+                    break;
                 default:
                     KanbanErrorManager::sendResponse(false, 'Action non reconnue', [], 'UNKNOWN_ACTION', 400);
             }
@@ -782,5 +785,258 @@ class KanbanAjaxHandler
             ]);
             KanbanErrorManager::sendServerError('Failed to create board from template');
         }
+    }
+    
+    /**
+     * Export kanban board to CSV
+     */
+    private function exportToCSV() {
+        global $INPUT, $ID;
+        
+        // Load export manager
+        require_once(dirname(__FILE__) . '/KanbanExportManager.php');
+        
+        $boardId = $INPUT->str('board_id');
+        $pageId = $INPUT->str('id') ?: $ID;
+        
+        if (!$boardId) {
+            KanbanErrorManager::sendResponse(false, 'ID de tableau manquant', [], 'MISSING_BOARD_ID', 400);
+            return;
+        }
+        
+        // Vérification des permissions de lecture
+        if (auth_quickaclcheck($pageId) < AUTH_READ) {
+            KanbanErrorManager::sendResponse(false, 'Permissions insuffisantes', [], 'INSUFFICIENT_PERMISSIONS', 403);
+            return;
+        }
+        
+        try {
+            // Chargement des données du tableau avec pageId
+            $boardData = $this->dataManager->loadBoardData($pageId, null);
+            
+            KanbanErrorManager::logInfo('CSV export - Board data loaded', [
+                'board_id' => $boardId,
+                'page_id' => $pageId,
+                'board_data_exists' => $boardData ? 'yes' : 'no',
+                'board_data_structure' => $boardData ? array_keys($boardData) : 'null'
+            ]);
+            
+            if (!$boardData) {
+                KanbanErrorManager::sendResponse(false, 'Tableau non trouvé', [], 'BOARD_NOT_FOUND', 404);
+                return;
+            }
+            
+            // Utiliser directement les données du kanban sans formatage supplémentaire
+            $exportData = [
+                'title' => $boardData['title'] ?? 'Kanban Board',
+                'columns' => $boardData['columns'] ?? []
+            ];
+            
+            KanbanErrorManager::logInfo('CSV export - Using direct data', [
+                'board_id' => $boardId,
+                'columns_count' => count($exportData['columns']),
+                'total_cards' => array_sum(array_map(function($col) {
+                    return count($col['cards'] ?? []);
+                }, $exportData['columns']))
+            ]);
+            
+            if (empty($exportData['columns'])) {
+                KanbanErrorManager::sendResponse(false, 'Aucune colonne trouvée pour l\'export', [], 'NO_COLUMNS', 404);
+                return;
+            }
+            
+            // Génération et envoi du CSV
+            KanbanExportManager::exportToCSV($boardId, $exportData);
+            
+        } catch (Exception $e) {
+            KanbanErrorManager::logError('CSV export failed', [
+                'board_id' => $boardId,
+                'page_id' => $pageId,
+                'error' => $e->getMessage()
+            ]);
+            KanbanErrorManager::sendServerError('Erreur lors de l\'export CSV');
+        }
+    }
+    
+    /**
+     * Formate les données pour l'export
+     */
+    private function formatDataForExport($boardData, $boardId) {
+        KanbanErrorManager::logInfo('formatDataForExport called', [
+            'board_id' => $boardId,
+            'board_data_exists' => $boardData ? 'yes' : 'no',
+            'board_data_type' => gettype($boardData),
+            'board_data_structure' => is_array($boardData) ? 'array with ' . count($boardData) . ' items' : 'not_array'
+        ]);
+        
+        // Les données kanban sont directement un tableau de colonnes
+        if (!$boardData || !is_array($boardData)) {
+            KanbanErrorManager::logInfo('formatDataForExport - Invalid board data', [
+                'board_data_exists' => $boardData ? 'yes' : 'no',
+                'is_array' => is_array($boardData) ? 'yes' : 'no'
+            ]);
+            return null;
+        }
+        
+        // Formater les données pour l'export - pas besoin de chercher un board spécifique
+        $exportData = [
+            'title' => 'Kanban Board',
+            'columns' => []
+        ];
+        
+        // Les données sont directement les colonnes
+        foreach ($boardData as $column) {
+            if (!isset($column['id'])) continue;
+            
+            $formattedColumn = [
+                'id' => $column['id'] ?? '',
+                'title' => $column['title'] ?? 'Colonne',
+                'cards' => []
+            ];
+            
+            if (isset($column['cards']) && is_array($column['cards'])) {
+                KanbanErrorManager::logInfo('Processing column cards', [
+                    'column_id' => $column['id'],
+                    'column_title' => $column['title'],
+                    'cards_count' => count($column['cards'])
+                ]);
+                
+                foreach ($column['cards'] as $cardIndex => $card) {
+                    KanbanErrorManager::logInfo('Processing card', [
+                        'column_id' => $column['id'],
+                        'card_index' => $cardIndex,
+                        'card_data' => $card
+                    ]);
+                    
+                    $formattedCard = [
+                        'id' => $card['id'] ?? 'card_' . $cardIndex,
+                        'title' => $card['title'] ?? $card['name'] ?? 'Carte sans titre',
+                        'content' => $card['description'] ?? $card['content'] ?? '',
+                        'priority' => $card['priority'] ?? '',
+                        'assignee' => $card['assignee'] ?? '',
+                        'due_date' => $card['dueDate'] ?? $card['due_date'] ?? '',
+                        'tags' => $card['tags'] ?? [],
+                        'created_date' => $card['created'] ?? $card['created_date'] ?? '',
+                        'creator' => $card['creator'] ?? $card['createdBy'] ?? '',
+                        'modified_date' => $card['lastModified'] ?? $card['modified_date'] ?? '',
+                        'internal_links' => $this->extractInternalLinksFromCard($card),
+                        'external_links' => $this->extractExternalLinksFromCard($card),
+                        'media_links' => $this->extractMediaLinksFromCard($card)
+                    ];
+                    
+                    $formattedColumn['cards'][] = $formattedCard;
+                }
+            }
+            
+            $exportData['columns'][] = $formattedColumn;
+        }
+        
+        KanbanErrorManager::logInfo('formatDataForExport - Export data formatted', [
+            'columns_count' => count($exportData['columns']),
+            'total_cards' => array_sum(array_map(function($col) {
+                return count($col['cards'] ?? []);
+            }, $exportData['columns']))
+        ]);
+        
+        return $exportData;
+    }
+    
+    /**
+     * Extrait les liens internes du contenu
+     */
+    private function extractInternalLinks($content) {
+        $links = [];
+        if (preg_match_all('/\[\[([^\]]+)\]\]/', $content, $matches)) {
+            $links = $matches[1];
+        }
+        return $links;
+    }
+    
+    /**
+     * Extrait les liens externes du contenu
+     */
+    private function extractExternalLinks($content) {
+        $links = [];
+        if (preg_match_all('/https?:\/\/[^\s\]]+/', $content, $matches)) {
+            $links = $matches[0];
+        }
+        return $links;
+    }
+    
+    /**
+     * Extrait les liens media du contenu
+     */
+    private function extractMediaLinks($content) {
+        $links = [];
+        if (preg_match_all('/\{\{([^\}]+)\}\}/', $content, $matches)) {
+            $links = $matches[1];
+        }
+        return $links;
+    }
+    
+    /**
+     * Extrait les liens internes d'une carte (depuis la structure de données)
+     */
+    private function extractInternalLinksFromCard($card) {
+        $links = [];
+        
+        // Liens depuis la structure de données
+        if (isset($card['internalLinks']) && is_array($card['internalLinks'])) {
+            foreach ($card['internalLinks'] as $link) {
+                $links[] = $link['target'] ?? $link['text'] ?? '';
+            }
+        }
+        
+        // Liens depuis la description
+        if (isset($card['description'])) {
+            $contentLinks = $this->extractInternalLinks($card['description']);
+            $links = array_merge($links, $contentLinks);
+        }
+        
+        return array_unique(array_filter($links));
+    }
+    
+    /**
+     * Extrait les liens externes d'une carte (depuis la structure de données)
+     */
+    private function extractExternalLinksFromCard($card) {
+        $links = [];
+        
+        // Liens depuis la structure de données
+        if (isset($card['externalLinks']) && is_array($card['externalLinks'])) {
+            foreach ($card['externalLinks'] as $link) {
+                $links[] = $link['url'] ?? '';
+            }
+        }
+        
+        // Liens depuis la description
+        if (isset($card['description'])) {
+            $contentLinks = $this->extractExternalLinks($card['description']);
+            $links = array_merge($links, $contentLinks);
+        }
+        
+        return array_unique(array_filter($links));
+    }
+    
+    /**
+     * Extrait les liens media d'une carte (depuis la structure de données)
+     */
+    private function extractMediaLinksFromCard($card) {
+        $links = [];
+        
+        // Médias depuis la structure de données
+        if (isset($card['media']) && is_array($card['media'])) {
+            foreach ($card['media'] as $media) {
+                $links[] = $media['name'] ?? $media['id'] ?? '';
+            }
+        }
+        
+        // Liens depuis la description
+        if (isset($card['description'])) {
+            $contentLinks = $this->extractMediaLinks($card['description']);
+            $links = array_merge($links, $contentLinks);
+        }
+        
+        return array_unique(array_filter($links));
     }
 }
