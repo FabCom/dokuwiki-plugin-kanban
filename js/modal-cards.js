@@ -1418,12 +1418,17 @@
         // Load discussions for this card
         let discussions = [];
         try {
-            if (window.KanbanDiscussions && window.KanbanDiscussions.loadDiscussions) {
+            if (window.KanbanDiscussions && window.KanbanDiscussions.loadCardDiscussions) {
                 const pageId = window.JSINFO?.id || '';
-                discussions = await window.KanbanDiscussions.loadDiscussions(pageId, cardId);
+                discussions = await window.KanbanDiscussions.loadCardDiscussions(pageId, cardId);
+                // Ensure discussions is an array
+                if (!Array.isArray(discussions)) {
+                    discussions = [];
+                }
             }
         } catch (error) {
             console.warn('Failed to load discussions for export:', error);
+            discussions = [];
         }
         
         // Create export data structure

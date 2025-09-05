@@ -217,16 +217,10 @@
             }
         }
         
-        // Bouton d'export CSV - toujours visible
+        // Bouton Import/Export unifié - toujours visible
         html += `
-            <button class="kanban-btn kanban-btn-info kanban-export-csv-btn" onclick="window.KanbanPlugin.exportToCSV('${boardContainer.id}')" title="Exporter en CSV pour tableur">
-                📊 CSV
-            </button>`;
-        
-        // Bouton d'export JSON - toujours visible
-        html += `
-            <button class="kanban-btn kanban-btn-info kanban-export-json-btn" onclick="window.KanbanPlugin.exportToJSON('${boardContainer.id}')" title="Exporter en JSON">
-                📄 JSON
+            <button class="kanban-btn kanban-btn-info kanban-import-export-btn" onclick="window.KanbanImportExport.showImportExportModal('${boardContainer.id}')" title="Import / Export des données">
+                📁 Import / Export
             </button>`;
         
         html += `</div>`;

@@ -338,7 +338,7 @@
     /**
      * Add performance monitoring interface #TODO
      */
-/*     function addPerformanceMonitoring() {
+    function addPerformanceMonitoring() {
         // Add to admin interfaces only
         if (window.JSINFO && window.JSINFO.isadmin) {
             var perfButton = $('<button id="kanban-perf-stats" style="position:fixed;top:10px;right:10px;z-index:9999;">Perf Stats</button>');
@@ -346,7 +346,7 @@
             
             perfButton.on('click', showPerformanceStats);
         }
-    } */
+    }
     
     /**
      * Show performance statistics

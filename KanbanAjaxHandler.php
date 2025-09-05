@@ -39,6 +39,17 @@ class KanbanAjaxHandler
         
         $call = $INPUT->str('call');
         
+        // DEBUG: Log TOUTES les requêtes AJAX (même celles d'autres plugins)
+        if ($call === 'kanban') {
+            KanbanErrorManager::logInfo('AJAX Request for Kanban received', [
+                'call' => $call,
+                'action' => $INPUT->str('action'),
+                'method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown',
+                'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown',
+                'referer' => $_SERVER['HTTP_REFERER'] ?? 'unknown'
+            ]);
+        }
+        
         // Only handle calls for our plugin
         if ($call !== 'kanban') {
             return;
@@ -49,6 +60,16 @@ class KanbanAjaxHandler
         $event->stopPropagation();
         
         $action = $INPUT->str('action');
+        
+        // DEBUG: Log toutes les requêtes AJAX
+        KanbanErrorManager::logInfo('AJAX Request received', [
+            'call' => $call,
+            'action' => $action,
+            'method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown',
+            'all_post_keys' => array_keys($_POST),
+            'all_get_keys' => array_keys($_GET),
+            'user' => KanbanAuthManager::getCurrentUser()
+        ]);
         
         try {
             switch ($action) {
@@ -105,6 +126,12 @@ class KanbanAjaxHandler
                     break;
                 case 'export_json':
                     $this->exportToJSON();
+                    break;
+                case 'import_json':
+                    $this->importFromJSON();
+                    break;
+                case 'import_board':
+                    $this->importFromJSON(); // Alias pour import_json
                     break;
                 default:
                     KanbanErrorManager::sendResponse(false, 'Action non reconnue', [], 'UNKNOWN_ACTION', 400);
@@ -934,6 +961,99 @@ class KanbanAjaxHandler
                 'error' => $e->getMessage()
             ]);
             KanbanErrorManager::sendServerError('Erreur lors de l\'export JSON');
+        }
+    }
+    
+    /**
+     * Import kanban data from JSON format
+     */
+    private function importFromJSON() {
+        global $INPUT;
+        
+        $pageId = $INPUT->str('id') ?: $INPUT->str('page_id');
+        $jsonData = $INPUT->str('json_data');
+        $importMode = $INPUT->str('import_mode', 'merge'); // merge, replace, append
+        $targetColumn = $INPUT->str('target_column'); // Pour import de carte seule
+        
+        // DEBUG: Log all received parameters
+        KanbanErrorManager::logInfo('importFromJSON called', [
+            'page_id' => $pageId,
+            'json_data_length' => strlen($jsonData ?: ''),
+            'import_mode' => $importMode,
+            'target_column' => $targetColumn,
+            'all_params' => $INPUT->arr(''),
+            'user' => KanbanAuthManager::getCurrentUser()
+        ]);
+        
+        // SECURITY: Validate authentication
+        if (!KanbanAuthManager::isAuthenticated()) {
+            KanbanErrorManager::logSecurity('JSON import denied - authentication failed');
+            KanbanErrorManager::sendAuthError();
+            return;
+        }
+        
+        // SECURITY: Check edit permissions
+        if (!KanbanAuthManager::canEdit($pageId)) {
+            KanbanErrorManager::logSecurity('JSON import denied - no edit permission', [
+                'page_id' => $pageId,
+                'user' => KanbanAuthManager::getCurrentUser()
+            ]);
+            KanbanErrorManager::sendResponse(false, 'Permission denied', [], 'PERMISSION_DENIED', 403);
+            return;
+        }
+        
+        // SECURITY: Validate required parameters
+        if (empty($pageId) || empty($jsonData)) {
+            KanbanErrorManager::logError('importFromJSON - missing required parameters', [
+                'page_id_empty' => empty($pageId),
+                'json_data_empty' => empty($jsonData),
+                'page_id_value' => $pageId,
+                'json_data_length' => strlen($jsonData ?: '')
+            ]);
+            KanbanErrorManager::sendValidationError('required_fields', 'page_id and json_data required');
+            return;
+        }
+        
+        try {
+            // Load export manager and import from JSON
+            require_once(dirname(__FILE__) . '/KanbanExportManager.php');
+            
+            // Préparer les options d'import
+            $importOptions = [
+                'target_column' => $targetColumn
+            ];
+            
+            $result = KanbanExportManager::importFromJSON($jsonData, $pageId, $importMode, $importOptions);
+            
+            if ($result['success']) {
+                // Clear cache after successful import
+                if ($this->cacheManager) {
+                    $this->cacheManager->clearAllCaches();
+                }
+                
+                KanbanErrorManager::logInfo('JSON import successful', [
+                    'page_id' => $pageId,
+                    'import_mode' => $importMode,
+                    'stats' => $result['stats'] ?? []
+                ]);
+                
+                KanbanErrorManager::sendResponse(true, $result['message'], [
+                    'stats' => $result['stats'] ?? [],
+                    'import_mode' => $importMode
+                ]);
+            } else {
+                KanbanErrorManager::sendResponse(false, $result['error'], [
+                    'details' => $result['details'] ?? []
+                ], 'IMPORT_ERROR', 400);
+            }
+            
+        } catch (Exception $e) {
+            KanbanErrorManager::logError('JSON import failed', [
+                'page_id' => $pageId,
+                'import_mode' => $importMode,
+                'error' => $e->getMessage()
+            ]);
+            KanbanErrorManager::sendServerError('Erreur lors de l\'import JSON');
         }
     }
 

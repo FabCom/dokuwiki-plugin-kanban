@@ -109,6 +109,12 @@ class KanbanAssetManager
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-template.js'
         ];
         
+        // Import/Export modal - for data exchange
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-import-export.js'
+        ];
+        
         $event->data['script'][] = [
             'type' => 'text/javascript',
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-main.js'
