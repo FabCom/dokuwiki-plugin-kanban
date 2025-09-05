@@ -437,34 +437,19 @@ class KanbanExportManager {
      */
     private static function replaceBoard($jsonData, $pageId, $dataManager) {
         try {
-            // DEBUG: Log l'entrée de replaceBoard
-            error_log("KANBAN DEBUG: replaceBoard called");
-            error_log("KANBAN DEBUG: jsonData is array: " . (is_array($jsonData) ? 'yes' : 'no'));
-            
             // Extraire les colonnes selon la structure JSON
             $columns = [];
             if (isset($jsonData['board']['columns'])) {
                 $columns = $jsonData['board']['columns'];
-                error_log("KANBAN DEBUG: replaceBoard - found board.columns with " . count($columns) . " columns");
             } elseif (isset($jsonData['columns'])) {
                 $columns = $jsonData['columns'];
-                error_log("KANBAN DEBUG: replaceBoard - found direct columns with " . count($columns) . " columns");
-            } else {
-                error_log("KANBAN DEBUG: replaceBoard - NO COLUMNS FOUND!");
-                error_log("KANBAN DEBUG: jsonData has board key: " . (isset($jsonData['board']) ? 'yes' : 'no'));
-                error_log("KANBAN DEBUG: jsonData has columns key: " . (isset($jsonData['columns']) ? 'yes' : 'no'));
             }
-            
-            error_log("KANBAN DEBUG: replaceBoard - extracted " . count($columns) . " columns");
             
             // Sauvegarder les discussions séparément
             $discussionStats = self::saveImportedDiscussions($pageId, $columns);
             
             // Nettoyer les discussions des données de board
             $cleanedColumns = self::cleanDiscussionsFromBoardData($columns);
-            
-            error_log("KANBAN DEBUG: replaceBoard - cleanedColumns count: " . count($cleanedColumns));
-            error_log("KANBAN DEBUG: replaceBoard - about to call saveBoardData");
             
             $result = $dataManager->saveBoardData($pageId, 'main', $cleanedColumns, 'import_replace');
             
@@ -499,32 +484,13 @@ class KanbanExportManager {
     private static function mergeBoard($jsonData, $currentData, $pageId, $dataManager) {
         try {
             // DEBUG: Log les données avant fusion
-            KanbanErrorManager::logInfo('mergeBoard - début', [
-                'page_id' => $pageId,
-                'current_data_type' => gettype($currentData),
+            KanbanErrorManager::logInfo('mergeBoard started', [
                 'current_data_structure' => is_array($currentData) ? array_keys($currentData) : 'not_array',
                 'import_data_structure' => is_array($jsonData) ? array_keys($jsonData) : 'not_array'
             ]);
             
-            // DEBUG: Plus de détails sur les données d'import
-            error_log("KANBAN DEBUG: mergeBoard - jsonData is array: " . (is_array($jsonData) ? 'yes' : 'no'));
-            if (isset($jsonData['board'])) {
-                error_log("KANBAN DEBUG: mergeBoard - jsonData has board key");
-                if (isset($jsonData['board']['columns'])) {
-                    error_log("KANBAN DEBUG: mergeBoard - jsonData[board][columns] count: " . count($jsonData['board']['columns']));
-                }
-            }
-            
             // Logique de fusion
             $mergedData = self::mergeBoardData($currentData, $jsonData);
-            
-            // DEBUG: Log le résultat de la fusion
-            KanbanErrorManager::logInfo('mergeBoard - après fusion', [
-                'merged_columns_count' => count($mergedData['columns'] ?? []),
-                'stats' => $mergedData['stats'] ?? []
-            ]);
-            
-            error_log("KANBAN DEBUG: mergeBoard - mergedData columns count: " . count($mergedData['columns'] ?? []));
             
             // Sauvegarder les discussions séparément AVANT de nettoyer les données
             $discussionStats = self::saveImportedDiscussions($pageId, $mergedData['columns']);

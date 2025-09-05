@@ -125,13 +125,10 @@ class KanbanDataManager
                     'content_preview' => substr($content, 0, 200) . '...'
                 ]);
                 
-                error_log("KANBAN DEBUG: About to call saveWikiText for page: $pageId");
-                error_log("KANBAN DEBUG: Global vars - \$ID=" . ($ID ?? 'null') . ", \$INFO=" . (isset($INFO) ? 'set' : 'null') . ", user=" . ($_SERVER['REMOTE_USER'] ?? 'null'));
                 
                 // Call saveWikiText without sectok - it should work in AJAX context
                 $saveResult = saveWikiText($pageId, $content, $summary);
                 
-                error_log("KANBAN DEBUG: saveWikiText completed for page: $pageId, result type: " . gettype($saveResult));
                 
                 KanbanErrorManager::logInfo('saveWikiText completed', [
                     'page_id' => $pageId,
@@ -213,7 +210,6 @@ class KanbanDataManager
      */
     public function saveBoardData($pageId, $boardId, $data, $changeType = 'modification') {
         // DEBUG: Force log to Apache error log
-        error_log("KANBAN DEBUG: saveBoardData called - pageId=$pageId, boardId=$boardId, changeType=$changeType, dataCount=" . (is_array($data) ? count($data) : 'not_array'));
         
         // DEBUG: Log entrée de la fonction
         KanbanErrorManager::logInfo('saveBoardData called', [
@@ -244,14 +240,11 @@ class KanbanDataManager
         }
         
         KanbanErrorManager::logInfo('saveBoardData permissions OK, calling saveToPageContent');
-        error_log("KANBAN DEBUG: Permissions OK, about to call saveToPageContent for pageId=$pageId");
         
         try {
             $result = $this->saveToPageContent($pageId, $boardId, $data, $changeType);
-            error_log("KANBAN DEBUG: saveToPageContent returned: " . ($result ? 'true' : 'false') . " for pageId=$pageId");
             return $result;
         } catch (Exception $e) {
-            error_log("KANBAN DEBUG: Exception in saveBoardData: " . $e->getMessage() . " for pageId=$pageId");
             KanbanErrorManager::logError('Exception in saveBoardData', [
                 'page_id' => $pageId,
                 'board_id' => $boardId,
@@ -384,22 +377,18 @@ class KanbanDataManager
                 $success = $this->safeSaveWikiText($pageId, $newContent, $summary);
                 
                 // DEBUG: Force log to Apache error log
-                error_log("KANBAN DEBUG: safeSaveWikiText returned: " . ($success ? 'true' : 'false') . " for page: $pageId");
                 
                 if ($success) {
                     // Clear cache after successful save
                     $this->cacheManager->clearAllCaches();
                     KanbanErrorManager::logInfo('Successfully saved page content with versioning', ['page_id' => $pageId]);
-                    error_log("KANBAN DEBUG: Save completed successfully for page: $pageId");
                     return true;
                 } else {
                     KanbanErrorManager::logError('safeSaveWikiText returned false', ['page_id' => $pageId]);
-                    error_log("KANBAN DEBUG: safeSaveWikiText failed for page: $pageId");
                     return false;
                 }
                 
             } catch (Exception $saveException) {
-                error_log("KANBAN DEBUG: Exception in save: " . $saveException->getMessage() . " for page: $pageId");
                 KanbanErrorManager::logError('Failed to save page content', [
                     'page_id' => $pageId,
                     'error' => $saveException->getMessage(),
@@ -482,7 +471,6 @@ class KanbanDataManager
      * @return string Generated content
      */
     private function generateKanbanContent($data) {
-        error_log("KANBAN DEBUG: generateKanbanContent called with data type: " . gettype($data) . ", structure: " . (is_array($data) ? json_encode(array_keys($data)) : 'not_array'));
         
         // CORRECTION: $data peut être soit un tableau de colonnes directement, soit un objet avec 'columns'
         if (is_array($data)) {
@@ -495,11 +483,9 @@ class KanbanDataManager
                 $columns = $data;
             }
         } else {
-            error_log("KANBAN DEBUG: generateKanbanContent - data is not array, returning empty");
             return '[]';
         }
         
-        error_log("KANBAN DEBUG: generateKanbanContent - using " . count($columns) . " columns");
         
         // Generate JSON content with proper formatting
         return json_encode($columns, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

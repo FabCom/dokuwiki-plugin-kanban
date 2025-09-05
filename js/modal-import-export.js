@@ -424,19 +424,10 @@
         function loadAvailableColumns(boardId, singleCardOptions) {
             const select = singleCardOptions.querySelector('.target-column-select');
             
-            // DEBUG: Vérifier la disponibilité des données
-            console.log('loadAvailableColumns - DEBUG:', {
-                boardId: boardId,
-                kanbanBoardsAvailable: !!window.kanbanBoards,
-                boardDataAvailable: !!(window.kanbanBoards && window.kanbanBoards[boardId]),
-                boardKeys: window.kanbanBoards ? Object.keys(window.kanbanBoards) : 'N/A'
-            });
-            
             // Récupérer les données du board depuis window.kanbanBoards
             const boardData = window.kanbanBoards && window.kanbanBoards[boardId];
             if (!boardData || !boardData.columns) {
                 select.innerHTML = '<option value="">Aucune colonne trouvée</option>';
-                console.warn('Aucune donnée de board trouvée pour:', boardId);
                 return;
             }
             
@@ -453,8 +444,6 @@
                 option.textContent = `${title} (${cardCount} cartes)`;
                 select.appendChild(option);
             });
-            
-            console.log('Colonnes chargées pour import:', boardData.columns.length);
         }
         
         // Confirmation d'import
