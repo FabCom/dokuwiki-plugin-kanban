@@ -30,8 +30,26 @@
         // Générer le contenu de façon asynchrone pour ne pas bloquer l'UI
         setTimeout(() => {
             try {
+                // Créer le système d'onglets pour la modale d'édition
+                const tabsContainer = createTabsContainer();
                 const form = createCardForm(cardData);
-                modal.querySelector('.kanban-modal-body').innerHTML = form;
+                
+                // Structure avec onglets - utiliser le générateur de tab discussion externe
+                const discussionTab = window.KanbanModalDiscussions 
+                    ? window.KanbanModalDiscussions.generateDiscussionTab(cardData.id)
+                    : `<div id="discussion-section-${cardData.id}"><div class="discussions-loading">Module discussions non disponible</div></div>`;
+                
+                modal.querySelector('.kanban-modal-body').innerHTML = `
+                    ${tabsContainer}
+                    <div class="tab-content">
+                        <div id="tab-info" class="tab-pane active">
+                            ${form}
+                        </div>
+                        <div id="tab-discussion" class="tab-pane">
+                            ${discussionTab}
+                        </div>
+                    </div>
+                `;
 
                 // Add footer
                 const footer = document.createElement('div');
@@ -153,10 +171,26 @@
                 // Bind remove media buttons
                 bindRemoveMediaButtons(modal, cardData);
                 
+                // Setup tabs functionality pour la modale d'édition
+                setupTabsEvents(modal);
+                
+                // Charger les discussions de façon asynchrone en utilisant le module externe
+                if (window.KanbanModalDiscussions) {
+                    // Pour la modale d'édition, on utilise la page courante comme sourcePageId
+                    const sourcePageId = window.JSINFO?.id || 'playground:kanban';
+                    window.KanbanModalDiscussions.loadDiscussionsInTab(cardData, sourcePageId);
+                }
+                
                 // Focus on title field
                 const titleField = modal.querySelector('#card-title');
                 if (titleField) {
                     titleField.focus();
+                }
+                
+                // Supprimer l'overlay de chargement de la carte s'il existe
+                const loadingOverlay = document.querySelector(`.kanban-card-loading-overlay[data-card-id="${cardData.id}"]`);
+                if (loadingOverlay) {
+                    loadingOverlay.remove();
                 }
                 
             } catch (error) {
@@ -183,7 +217,11 @@
         const tabsContainer = createTabsContainer();
         const form = createCardViewForm(cardData);
         
-        // Structure avec onglets
+        // Structure avec onglets - utiliser le générateur de tab discussion externe
+        const discussionTab = window.KanbanModalDiscussions 
+            ? window.KanbanModalDiscussions.generateDiscussionTab(cardData.id)
+            : `<div id="discussion-section-${cardData.id}"><div class="discussions-loading">Module discussions non disponible</div></div>`;
+        
         modal.querySelector('.kanban-modal-body').innerHTML = `
             ${tabsContainer}
             <div class="tab-content">
@@ -191,9 +229,7 @@
                     ${form}
                 </div>
                 <div id="tab-discussion" class="tab-pane">
-                    <div id="discussion-section-${cardData.id}">
-                        <div class="discussions-loading">Chargement des discussions...</div>
-                    </div>
+                    ${discussionTab}
                 </div>
             </div>
         `;
@@ -216,8 +252,16 @@
         // Setup tabs functionality
         setupTabsEvents(modal);
 
-        // Charger les discussions de façon asynchrone
-        loadCardDiscussions(cardData, sourcePageId);
+        // Charger les discussions de façon asynchrone en utilisant le module externe
+        if (window.KanbanModalDiscussions) {
+            window.KanbanModalDiscussions.loadDiscussionsInTab(cardData, sourcePageId);
+        }
+
+        // Supprimer l'overlay de chargement de la carte s'il existe
+        const loadingOverlay = document.querySelector(`.kanban-card-loading-overlay[data-card-id="${cardData.id}"]`);
+        if (loadingOverlay) {
+            loadingOverlay.remove();
+        }
 
         modal.style.display = 'block';
         return modal;
@@ -260,143 +304,24 @@
                 const targetPane = modal.querySelector(`#${targetTab}`);
                 if (targetPane) {
                     targetPane.classList.add('active');
+                    
+                    // Si c'est l'onglet discussion, scroll vers le dernier message
+                    if (targetTab === 'tab-discussion') {
+                        if (window.KanbanModalDiscussions && window.KanbanModalDiscussions.setupDiscussionTabScroll) {
+                            window.KanbanModalDiscussions.setupDiscussionTabScroll(targetPane);
+                        } else {
+                            // Fallback si le module n'est pas disponible
+                            setTimeout(() => {
+                                const discussionsContainer = targetPane.querySelector('.discussions-container');
+                                if (discussionsContainer) {
+                                    discussionsContainer.scrollTop = discussionsContainer.scrollHeight;
+                                }
+                            }, 100);
+                        }
+                    }
                 }
             });
         });
-    }
-
-    /**
-     * Charge et affiche les discussions d'une carte
-     */
-    async function loadCardDiscussions(cardData, sourcePageId = null) {
-        try {
-            // Utiliser le sourcePageId si fourni, sinon fallback sur la page courante
-            const pageId = sourcePageId || window.JSINFO?.id || 'playground:kanban';
-            const discussionSection = document.getElementById(`discussion-section-${cardData.id}`);
-            
-            if (!discussionSection) {
-                return; // Section non trouvée
-            }
-
-            // Afficher un loading
-            discussionSection.innerHTML = `
-                <div class="kanban-modal-section kanban-discussions-section">
-                    <h4 class="kanban-modal-section-title">💬 Discussion</h4>
-                    <div class="discussions-loading">Chargement des discussions...</div>
-                </div>
-            `;
-
-            // Charger les discussions si le module est disponible
-            if (window.KanbanDiscussions) {
-                const discussions = await window.KanbanDiscussions.loadCardDiscussions(pageId, cardData.id);
-                const discussionHtml = window.KanbanDiscussions.generateDiscussionSection(pageId, cardData.id, discussions);
-                discussionSection.innerHTML = discussionHtml;
-                
-                // Mettre à jour le badge de compteur dans l'onglet
-                updateDiscussionBadge(discussions.length);
-                
-                // Ajouter l'event listener pour le bouton publier
-                setupDiscussionEvents(pageId, cardData.id);
-            } else {
-                // Module discussions non chargé
-                discussionSection.innerHTML = `
-                    <div class="kanban-modal-section kanban-discussions-section">
-                        <h4 class="kanban-modal-section-title">💬 Discussion</h4>
-                        <div class="discussions-error">Module discussions non disponible</div>
-                    </div>
-                `;
-            }
-        } catch (error) {
-            console.error('Erreur chargement discussions:', error);
-            const discussionSection = document.getElementById(`discussion-section-${cardData.id}`);
-            if (discussionSection) {
-                discussionSection.innerHTML = `
-                    <div class="kanban-modal-section kanban-discussions-section">
-                        <h4 class="kanban-modal-section-title">💬 Discussion</h4>
-                        <div class="discussions-error">Erreur lors du chargement des discussions</div>
-                    </div>
-                `;
-            }
-        }
-    }
-
-    /**
-     * Met à jour le badge de compteur de discussion dans l'onglet
-     */
-    function updateDiscussionBadge(count) {
-        const badge = document.querySelector('.discussion-count-badge');
-        if (badge) {
-            if (count > 0) {
-                badge.textContent = count;
-                badge.style.display = 'inline';
-            } else {
-                badge.style.display = 'none';
-            }
-        }
-    }
-
-    /**
-     * Configure les événements de la section discussion
-     */
-    function setupDiscussionEvents(pageId, cardId) {
-        const submitBtn = document.querySelector(`.discussion-submit[data-card-id="${cardId}"]`);
-        const textarea = document.getElementById(`new-discussion-${cardId}`);
-        
-        if (submitBtn && textarea) {
-            submitBtn.addEventListener('click', async function() {
-                const message = textarea.value.trim();
-                if (!message) {
-                    alert('Veuillez saisir un message');
-                    return;
-                }
-
-                // Désactiver le bouton pendant l'envoi
-                submitBtn.disabled = true;
-                submitBtn.textContent = 'Publication...';
-
-                try {
-                    const user = window.JSINFO?.kanban_user || window.JSINFO?.kanban_user_name || window.JSINFO?.userinfo?.name || window.JSINFO?.client || 'Anonyme';
-                    const success = await window.KanbanDiscussions.addDiscussionMessage(pageId, cardId, message, user);
-                    
-                    if (success) {
-                        // Rechargement des discussions
-                        const discussions = await window.KanbanDiscussions.loadCardDiscussions(pageId, cardId);
-                        const discussionSection = document.getElementById(`discussion-section-${cardId}`);
-                        const discussionHtml = window.KanbanDiscussions.generateDiscussionSection(pageId, cardId, discussions);
-                        discussionSection.innerHTML = discussionHtml;
-                        
-                        // Mettre à jour le badge
-                        updateDiscussionBadge(discussions.length);
-                        
-                        // Mettre à jour l'indicateur sur la carte dans le tableau principal
-                        if (window.KanbanDiscussions && window.KanbanDiscussions.updateCardDiscussionIndicator) {
-                            window.KanbanDiscussions.updateCardDiscussionIndicator(cardId, discussions.length);
-                        }
-                        
-                        // Notifier les vues kanbanview de la mise à jour
-                        if (window.notifyKanbanViewDiscussionUpdate) {
-                            window.notifyKanbanViewDiscussionUpdate(pageId, cardId);
-                        }
-                        
-                        // Remettre en place les événements
-                        setupDiscussionEvents(pageId, cardId);
-                        
-                        // Clear textarea
-                        document.getElementById(`new-discussion-${cardId}`).value = '';
-                        
-                    } else {
-                        alert('Erreur lors de la publication du message');
-                    }
-                } catch (error) {
-                    console.error('Erreur publication message:', error);
-                    alert('Erreur lors de la publication du message');
-                } finally {
-                    // Réactiver le bouton
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = 'Publier';
-                }
-            });
-        }
     }
 
     /**

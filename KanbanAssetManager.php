@@ -97,6 +97,12 @@ class KanbanAssetManager
             'src' => DOKU_BASE . 'lib/plugins/kanban/js/discussions.js'
         ];
         
+        // Discussions modal tab - shared functionality
+        $event->data['script'][] = [
+            'type' => 'text/javascript',
+            'src' => DOKU_BASE . 'lib/plugins/kanban/js/modal-discussions.js'
+        ];
+        
         // Template modal - for creating boards from templates
         $event->data['script'][] = [
             'type' => 'text/javascript',

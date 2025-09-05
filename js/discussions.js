@@ -252,13 +252,48 @@
     }
 
     /**
+     * Formate un timestamp en format relatif (ex: "il y a 2 minutes")
+     * @param {string} timestamp - Timestamp ISO
+     * @returns {string} - Format relatif
+     */
+    function formatRelativeTime(timestamp) {
+        const now = new Date();
+        const date = new Date(timestamp);
+        const diffMs = now - date;
+        const diffSeconds = Math.floor(diffMs / 1000);
+        const diffMinutes = Math.floor(diffSeconds / 60);
+        const diffHours = Math.floor(diffMinutes / 60);
+        const diffDays = Math.floor(diffHours / 24);
+
+        if (diffSeconds < 60) {
+            return "à l'instant";
+        } else if (diffMinutes < 60) {
+            return `il y a ${diffMinutes} minute${diffMinutes > 1 ? 's' : ''}`;
+        } else if (diffHours < 24) {
+            return `il y a ${diffHours} heure${diffHours > 1 ? 's' : ''}`;
+        } else if (diffDays < 7) {
+            return `il y a ${diffDays} jour${diffDays > 1 ? 's' : ''}`;
+        } else {
+            // Pour les messages plus anciens, afficher la date complète
+            return date.toLocaleDateString('fr-FR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+    }
+
+    /**
      * Formate un message pour l'affichage
      * @param {Object} message - Objet message
      * @returns {string} - HTML du message formaté
      */
     function formatDiscussionMessage(message) {
         const timestamp = new Date(message.timestamp);
-        const formattedDate = timestamp.toLocaleDateString('fr-FR', {
+        const relativeTime = formatRelativeTime(message.timestamp);
+        const absoluteTime = timestamp.toLocaleDateString('fr-FR', {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
@@ -276,7 +311,7 @@
             <div class="discussion-message" data-message-id="${message.id}">
                 <div class="discussion-message-header">
                     <span class="discussion-user">👤 ${escapeHtml(message.user)}</span>
-                    <span class="discussion-timestamp">${formattedDate}</span>
+                    <span class="discussion-timestamp" title="${absoluteTime}">${relativeTime}</span>
                     ${message.edited ? '<span class="discussion-edited">(modifié)</span>' : ''}
                 </div>
                 <div class="discussion-message-content">
@@ -307,9 +342,10 @@
                 <div class="discussion-form">
                     <textarea 
                         id="new-discussion-${cardId}" 
-                        placeholder="Ajouter un commentaire..."
+                        placeholder="Ajouter un commentaire... (Ctrl+Entrée pour publier)"
                         rows="3"
-                        class="discussion-input"
+                        class="discussion-input auto-resize"
+                        style="resize: none; overflow: hidden;"
                     ></textarea>
                     <div class="discussion-form-actions">
                         <button 
@@ -318,7 +354,8 @@
                             data-page-id="${pageId}"
                             data-card-id="${cardId}"
                         >
-                            Publier
+                            <span class="btn-text">Publier</span>
+                            <span class="btn-loader" style="display: none;">⏳</span>
                         </button>
                     </div>
                 </div>

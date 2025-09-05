@@ -3527,6 +3527,55 @@
     cursor: not-allowed;
 }
 
+/* Nouveau: Améliorer le feedback visuel du bouton */
+.discussion-submit .btn-loader {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* Nouveau: Auto-resize textarea */
+.discussion-input.auto-resize {
+    min-height: 60px;
+    max-height: 200px;
+    transition: height 0.2s ease;
+}
+
+/* Nouveau: Améliorer l'apparence du timestamp relatif */
+.discussion-timestamp {
+    color: #6c757d;
+    font-size: 12px;
+    cursor: help;
+    transition: color 0.2s ease;
+}
+
+.discussion-timestamp:hover {
+    color: #495057;
+}
+
+/* Nouveau: Scroll bar personnalisée pour le container des discussions */
+.discussions-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.discussions-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.discussions-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.discussions-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
 /* Messages compacts sur mobile */
 @media (max-width: 768px) {
     .discussions-container {
