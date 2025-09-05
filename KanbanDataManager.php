@@ -138,13 +138,14 @@ class KanbanDataManager
                 'content_length' => strlen($newContent)
             ]);
             
-            // Save using DokuWiki's saveWikiText function with proper parameters
+            // Save using DokuWiki's saveWikiText function for proper versioning
             try {
-                io_saveFile(wikiFN($pageId), $newContent);
+                // Use saveWikiText() instead of io_saveFile() to enable DokuWiki versioning
+                saveWikiText($pageId, $newContent, $summary);
                 
                 // Clear cache after successful save
                 $this->cacheManager->clearAllCaches();
-                KanbanErrorManager::logInfo('Successfully saved page content', ['page_id' => $pageId]);
+                KanbanErrorManager::logInfo('Successfully saved page content with versioning', ['page_id' => $pageId]);
                 return true;
                 
             } catch (Exception $saveException) {

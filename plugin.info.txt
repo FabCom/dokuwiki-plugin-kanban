@@ -1,7 +1,7 @@
 base     kanban
-author   Assistant
-email    assistant@example.com
+author   FabCom
+email    fabcom@communs.fr
 date     2025-09-04
 name     Kanban Plugin
 desc     Advanced Kanban board plugin for DokuWiki with inclusion system
-url      https://github.com/username/dokuwiki-kanban-plugin
+url      https://github.com/FabCom/dokuwiki-plugin-kanban
