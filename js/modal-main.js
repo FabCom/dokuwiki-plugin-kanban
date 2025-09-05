@@ -27,8 +27,8 @@
             return window.KanbanModalCards?.showCardModal(cardData, callback);
         },
         
-        showCardViewModal: function(cardData) {
-            return window.KanbanModalCards?.showCardViewModal(cardData);
+        showCardViewModal: function(cardData, sourcePageId) {
+            return window.KanbanModalCards?.showCardViewModal(cardData, sourcePageId);
         },
 
         // Column modals

@@ -176,7 +176,7 @@
     /**
      * Show card in read-only modal
      */
-    function showCardViewModal(cardData) {
+    function showCardViewModal(cardData, sourcePageId = null) {
         const modal = window.KanbanModalCore.createModal('kanban-card-view-modal', 'Consulter la carte');
         
         // Créer le système d'onglets
@@ -217,7 +217,7 @@
         setupTabsEvents(modal);
 
         // Charger les discussions de façon asynchrone
-        loadCardDiscussions(cardData);
+        loadCardDiscussions(cardData, sourcePageId);
 
         modal.style.display = 'block';
         return modal;
@@ -268,9 +268,10 @@
     /**
      * Charge et affiche les discussions d'une carte
      */
-    async function loadCardDiscussions(cardData) {
+    async function loadCardDiscussions(cardData, sourcePageId = null) {
         try {
-            const pageId = window.JSINFO?.id || 'playground:kanban'; // Page courante ou par défaut
+            // Utiliser le sourcePageId si fourni, sinon fallback sur la page courante
+            const pageId = sourcePageId || window.JSINFO?.id || 'playground:kanban';
             const discussionSection = document.getElementById(`discussion-section-${cardData.id}`);
             
             if (!discussionSection) {
@@ -370,6 +371,11 @@
                         // Mettre à jour l'indicateur sur la carte dans le tableau principal
                         if (window.KanbanDiscussions && window.KanbanDiscussions.updateCardDiscussionIndicator) {
                             window.KanbanDiscussions.updateCardDiscussionIndicator(cardId, discussions.length);
+                        }
+                        
+                        // Notifier les vues kanbanview de la mise à jour
+                        if (window.notifyKanbanViewDiscussionUpdate) {
+                            window.notifyKanbanViewDiscussionUpdate(pageId, cardId);
                         }
                         
                         // Remettre en place les événements

@@ -11,6 +11,10 @@ class KanbanView {
         this.loadingElement = element.querySelector('.kanban-view-loading');
         this.contentElement = element.querySelector('.kanban-view-content');
         
+        // Enregistrer cette instance dans le registre global
+        window.KanbanViewInstances = window.KanbanViewInstances || [];
+        window.KanbanViewInstances.push(this);
+        
         this.init();
     }
     
@@ -425,13 +429,8 @@ class KanbanView {
      * Gérer le clic sur une carte selon le contexte
      */
     handleCardClick(card, isSingleView) {
-        if (isSingleView) {
-            // En vue simple, ouvrir la modale de détails
-            this.openCardModal(card);
-        } else {
-            // En vue complète, rediriger vers le tableau avec mise en évidence
-            this.goToFullBoard(card.id);
-        }
+        // Toujours ouvrir la modale de détails plutôt que rediriger
+        this.openCardModal(card);
     }
     
     /**
@@ -562,6 +561,63 @@ class KanbanView {
     }
     
     /**
+     * Mettre à jour l'indicateur de discussions pour une carte spécifique
+     */
+    async updateCardDiscussionIndicator(cardId) {
+        if (typeof window.KanbanDiscussions !== 'undefined' && window.KanbanDiscussions.getDiscussionCount) {
+            try {
+                // Trouver l'élément de la carte
+                const cardElement = this.element.querySelector(`[data-card-id="${cardId}"]`);
+                if (!cardElement) {
+                    console.warn('Carte non trouvée pour mise à jour:', cardId);
+                    return;
+                }
+
+                const count = await window.KanbanDiscussions.getDiscussionCount(this.config.board, cardId);
+                
+                // Trouver ou créer le container d'indicateurs
+                let indicatorsContainer = cardElement.querySelector('.kanban-card-indicators');
+                if (!indicatorsContainer && count > 0) {
+                    indicatorsContainer = document.createElement('div');
+                    indicatorsContainer.className = 'kanban-card-indicators';
+                    
+                    const footer = cardElement.querySelector('.kanban-card-footer');
+                    if (footer) {
+                        cardElement.insertBefore(indicatorsContainer, footer);
+                    } else {
+                        cardElement.appendChild(indicatorsContainer);
+                    }
+                }
+                
+                if (indicatorsContainer) {
+                    // Supprimer l'ancien indicateur de discussion s'il existe
+                    const oldDiscussionIndicator = indicatorsContainer.querySelector('.discussion-indicator');
+                    if (oldDiscussionIndicator) {
+                        oldDiscussionIndicator.remove();
+                    }
+                    
+                    // Créer le nouvel indicateur seulement s'il y a des discussions
+                    if (count > 0) {
+                        const discussionIndicator = document.createElement('span');
+                        discussionIndicator.className = 'kanban-content-indicator kanban-tooltip discussion-indicator';
+                        discussionIndicator.setAttribute('data-tooltip-text', `${count} message${count > 1 ? 's' : ''} de discussion`);
+                        discussionIndicator.innerHTML = `💬 ${count}`;
+                        indicatorsContainer.appendChild(discussionIndicator);
+                    }
+                    
+                    // Supprimer le container s'il est vide
+                    if (indicatorsContainer.children.length === 0) {
+                        indicatorsContainer.remove();
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Erreur mise à jour indicateur discussions:', error);
+            }
+        }
+    }
+
+    /**
      * Initialiser l'indicateur de discussions
      */
     async initDiscussionIndicator(cardElement, cardId) {
@@ -595,8 +651,8 @@ class KanbanView {
                     // Créer le nouvel indicateur
                     const discussionIndicator = document.createElement('span');
                     discussionIndicator.className = 'kanban-content-indicator kanban-tooltip discussion-indicator';
+                    discussionIndicator.setAttribute('data-tooltip-text', `${count} message${count > 1 ? 's' : ''} de discussion`);
                     discussionIndicator.innerHTML = `💬 ${count}`;
-                    discussionIndicator.title = `${count} message${count > 1 ? 's' : ''} de discussion`;
                     
                     indicatorsContainer.appendChild(discussionIndicator);
                 } else {
@@ -632,15 +688,15 @@ class KanbanView {
         console.log('Tentative d\'ouverture de modale pour:', card.id);
         
         // Utiliser le système de modales existant si disponible
-        if (typeof window.KanbanModalCards !== 'undefined' && window.KanbanModalCards.openCardModal) {
-            console.log('Utilisation de KanbanModalCards');
-            window.KanbanModalCards.openCardModal(card.id, this.config.board);
-        } else if (typeof window.KanbanModal !== 'undefined' && window.KanbanModal.openCard) {
-            console.log('Utilisation de KanbanModal');
-            window.KanbanModal.openCard(card.id, this.config.board);
+        if (typeof window.KanbanModal !== 'undefined' && window.KanbanModal.showCardViewModal) {
+            console.log('Utilisation de KanbanModal.showCardViewModal');
+            window.KanbanModal.showCardViewModal(card, this.config.board);
+        } else if (typeof window.KanbanModalCards !== 'undefined' && window.KanbanModalCards.showCardViewModal) {
+            console.log('Utilisation de KanbanModalCards.showCardViewModal');
+            window.KanbanModalCards.showCardViewModal(card, this.config.board);
         } else {
             console.log('Fallback vers URL directe');
-            // Fallback : rediriger vers la page du kanban avec ancre (retirer le préfixe card-)
+            // Fallback : rediriger vers la page du kanban avec ancre
             const url = `${DOKU_BASE}doku.php?id=${this.config.board}#${card.id}`;
             window.open(url, '_blank');
         }
@@ -663,5 +719,17 @@ class KanbanView {
     }
 }
 
+// Registre global des instances KanbanView pour les notifications
+window.KanbanViewInstances = window.KanbanViewInstances || [];
+
 // Rendre la classe disponible globalement
 window.KanbanView = KanbanView;
+
+// Fonction globale pour notifier toutes les vues qu'une discussion a été mise à jour
+window.notifyKanbanViewDiscussionUpdate = function(sourcePageId, cardId) {
+    window.KanbanViewInstances.forEach(instance => {
+        if (instance.config && instance.config.board === sourcePageId) {
+            instance.updateCardDiscussionIndicator(cardId);
+        }
+    });
+};

@@ -242,7 +242,8 @@
             discussions.push(newMessage);
             
             // Sauvegarde
-            return await saveCardDiscussions(pageId, cardId, discussions);
+            const result = await saveCardDiscussions(pageId, cardId, discussions);
+            return result;
             
         } catch (error) {
             console.error('Erreur ajout message:', error);
