@@ -223,6 +223,12 @@
                 📊 CSV
             </button>`;
         
+        // Bouton d'export JSON - toujours visible
+        html += `
+            <button class="kanban-btn kanban-btn-info kanban-export-json-btn" onclick="window.KanbanPlugin.exportToJSON('${boardContainer.id}')" title="Exporter en JSON">
+                📄 JSON
+            </button>`;
+        
         html += `</div>`;
         html += `</div>`;
         
@@ -1607,9 +1613,61 @@
         }, 1000);
     }
 
+    /**
+     * Export kanban board to JSON
+     */
+    function exportToJSON(boardId) {
+        const realBoardId = boardId.replace('kanban_', '');
+        const pageId = window.JSINFO?.id || 'playground:kanban';
+        
+        // Visual feedback
+        const loadingBtn = document.querySelector(`#${boardId} .kanban-export-json-btn`);
+        if (loadingBtn) {
+            loadingBtn.disabled = true;
+            loadingBtn.innerHTML = '⏳ Export...';
+        }
+        
+        // Create form for POST request
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = DOKU_BASE + 'lib/exe/ajax.php';
+        form.target = '_blank';
+        
+        // Add form fields
+        const fields = {
+            call: 'kanban',
+            action: 'export_json',
+            board_id: realBoardId,
+            id: pageId
+        };
+        
+        for (const [key, value] of Object.entries(fields)) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = value;
+            form.appendChild(input);
+        }
+        
+        // Submit form
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
+        
+        // Reset button after delay
+        setTimeout(() => {
+            if (loadingBtn) {
+                loadingBtn.disabled = false;
+                loadingBtn.innerHTML = '📄 JSON';
+            }
+            showNotification('Export JSON lancé', 'success');
+        }, 1000);
+    }
+
     // Export functions to global scope for access from HTML
     window.KanbanPlugin = window.KanbanPlugin || {};
     window.KanbanPlugin.toggleFullscreen = toggleFullscreen;
     window.KanbanPlugin.exportToCSV = exportToCSV;
+    window.KanbanPlugin.exportToJSON = exportToJSON;
 
 })();

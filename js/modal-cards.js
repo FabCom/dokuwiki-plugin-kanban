@@ -234,10 +234,15 @@
             </div>
         `;
 
-        // Add footer with edit option
+        // Add footer with edit option and export
         const footer = document.createElement('div');
         footer.className = 'kanban-modal-footer';
         footer.innerHTML = `
+            <button type="button" class="kanban-btn kanban-btn-info kanban-export-card-json" 
+                    onclick="window.KanbanCards.exportCardToJSON('${cardData.id}')" 
+                    title="Exporter cette carte en JSON">
+                📄 Export JSON
+            </button>
             <button type="button" class="kanban-btn kanban-btn-secondary kanban-modal-close">Fermer</button>
         `;
         
@@ -1378,6 +1383,105 @@
         });
     }
 
+    /**
+     * Export a single card to JSON format
+     */
+    async function exportCardToJSON(cardId) {
+        // Find the card data in the global kanban boards
+        let cardData = null;
+        let boardId = null;
+        
+        // Search through all boards to find the card
+        for (const [bid, boardData] of Object.entries(window.kanbanBoards || {})) {
+            if (boardData.columns) {
+                for (const column of boardData.columns) {
+                    if (column.cards) {
+                        const foundCard = column.cards.find(card => card.id === cardId);
+                        if (foundCard) {
+                            cardData = foundCard;
+                            boardId = bid;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (cardData) break;
+        }
+        
+        if (!cardData) {
+            if (window.showNotification) {
+                window.showNotification('Carte non trouvée pour l\'export', 'error');
+            }
+            return;
+        }
+        
+        // Load discussions for this card
+        let discussions = [];
+        try {
+            if (window.KanbanDiscussions && window.KanbanDiscussions.loadDiscussions) {
+                const pageId = window.JSINFO?.id || '';
+                discussions = await window.KanbanDiscussions.loadDiscussions(pageId, cardId);
+            }
+        } catch (error) {
+            console.warn('Failed to load discussions for export:', error);
+        }
+        
+        // Create export data structure
+        const exportData = {
+            metadata: {
+                card_id: cardData.id,
+                page_id: window.JSINFO?.id || '',
+                export_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                export_format_version: '1.0',
+                source_board_id: boardId
+            },
+            card: {
+                id: cardData.id,
+                title: cardData.title || '',
+                description: cardData.description || cardData.content || '',
+                priority: cardData.priority || 'normal',
+                assignee: cardData.assignee || '',
+                dueDate: cardData.dueDate || cardData.due_date || '',
+                tags: cardData.tags || [],
+                created: cardData.created || cardData.created_date || '',
+                creator: cardData.creator || cardData.createdBy || '',
+                lastModified: cardData.lastModified || cardData.modified_date || '',
+                lastModifiedBy: cardData.lastModifiedBy || cardData.last_modified_by || '',
+                internalLinks: cardData.internalLinks || [],
+                externalLinks: cardData.externalLinks || [],
+                media: cardData.media || [],
+                discussions: discussions,
+                discussion_count: discussions.length
+            }
+        };
+        
+        // Convert to JSON string
+        const jsonString = JSON.stringify(exportData, null, 2);
+        
+        // Create download link
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const filename = `card_${cardData.id}_${new Date().toISOString().slice(0, 10)}.json`;
+        
+        // Create temporary download link
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.style.display = 'none';
+        
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        // Clean up the URL object
+        URL.revokeObjectURL(url);
+        
+        if (window.showNotification) {
+            window.showNotification(`Carte exportée: ${filename}`, 'success');
+        }
+    }
+
     // Export functions to global scope
     window.KanbanModalCards = {
         showCardModal,
@@ -1394,7 +1498,12 @@
         showMediaBrowserModal,
         addMediaToCard,
         updateMediaDisplay,
-        bindRemoveMediaButtons
+        bindRemoveMediaButtons,
+        exportCardToJSON
     };
+    
+    // Export also to KanbanCards for easier access
+    window.KanbanCards = window.KanbanCards || {};
+    window.KanbanCards.exportCardToJSON = exportCardToJSON;
 
 })();

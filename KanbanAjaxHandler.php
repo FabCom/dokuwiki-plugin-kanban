@@ -103,6 +103,9 @@ class KanbanAjaxHandler
                 case 'export_csv':
                     $this->exportToCSV();
                     break;
+                case 'export_json':
+                    $this->exportToJSON();
+                    break;
                 default:
                     KanbanErrorManager::sendResponse(false, 'Action non reconnue', [], 'UNKNOWN_ACTION', 400);
             }
@@ -858,6 +861,82 @@ class KanbanAjaxHandler
         }
     }
     
+    /**
+     * Export kanban board to JSON format
+     */
+    private function exportToJSON() {
+        global $INPUT;
+        
+        $boardId = $INPUT->str('board_id');
+        $pageId = $INPUT->str('id') ?: $INPUT->str('page_id');
+        
+        // SECURITY: Validate required parameters
+        if (empty($boardId) || empty($pageId)) {
+            KanbanErrorManager::sendValidationError('required_fields', 'board_id and page_id required');
+            return;
+        }
+        
+        // SECURITY: Check read permissions
+        if (!KanbanAuthManager::canRead($pageId)) {
+            KanbanErrorManager::logSecurity('JSON export denied - no read permission', [
+                'page_id' => $pageId,
+                'user' => KanbanAuthManager::getCurrentUser()
+            ]);
+            KanbanErrorManager::sendResponse(false, 'Permission denied', [], 'PERMISSION_DENIED', 403);
+            return;
+        }
+        
+        try {
+            // Charger les données du board
+            $boardData = $this->dataManager->loadBoardData($pageId, $boardId);
+            
+            KanbanErrorManager::logInfo('JSON export - Board data loaded', [
+                'board_id' => $boardId,
+                'page_id' => $pageId,
+                'board_data_exists' => $boardData ? 'yes' : 'no',
+                'board_data_structure' => $boardData ? array_keys($boardData) : 'null'
+            ]);
+            
+            if (!$boardData) {
+                KanbanErrorManager::sendResponse(false, 'Tableau non trouvé', [], 'BOARD_NOT_FOUND', 404);
+                return;
+            }
+            
+            // Utiliser directement les données du kanban comme pour le CSV
+            $exportData = [
+                'title' => $boardData['title'] ?? 'Kanban Board',
+                'columns' => $boardData['columns'] ?? []
+            ];
+            
+            KanbanErrorManager::logInfo('JSON export - Using direct data', [
+                'board_id' => $boardId,
+                'columns_count' => count($exportData['columns']),
+                'total_cards' => array_sum(array_map(function($col) {
+                    return count($col['cards'] ?? []);
+                }, $exportData['columns']))
+            ]);
+            
+            if (empty($exportData['columns'])) {
+                KanbanErrorManager::sendResponse(false, 'Aucune colonne trouvée pour l\'export', [], 'NO_COLUMNS', 404);
+                return;
+            }
+            
+            // Load export manager and export to JSON
+            require_once(dirname(__FILE__) . '/KanbanExportManager.php');
+            
+            // Génération et envoi du JSON
+            KanbanExportManager::exportToJSON($boardId, $exportData, $pageId);
+            
+        } catch (Exception $e) {
+            KanbanErrorManager::logError('JSON export failed', [
+                'board_id' => $boardId,
+                'page_id' => $pageId,
+                'error' => $e->getMessage()
+            ]);
+            KanbanErrorManager::sendServerError('Erreur lors de l\'export JSON');
+        }
+    }
+
     /**
      * Formate les données pour l'export
      */

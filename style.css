@@ -86,6 +86,16 @@
     transform: translateY(-1px);
 }
 
+.kanban-btn-info {
+    background: #17a2b8;
+    color: white;
+}
+
+.kanban-btn-info:hover {
+    background: #138496;
+    transform: translateY(-1px);
+}
+
 .kanban-btn-icon {
     width: 24px;
     height: 24px;
