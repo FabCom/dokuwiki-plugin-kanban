@@ -99,6 +99,13 @@ class KanbanSecurityPolicy
         switch ($type) {
             case 'username':
                 // Username should only contain safe characters
+
+                //if empty
+                if (empty($input)) {
+                    self::logSecurity("Empty username sanitized");
+                    return '';
+                }
+
                 if (!preg_match('/^[a-zA-Z0-9@._-]+$/', $input)) {
                     self::logSecurity("Suspicious username sanitized: $input");
                     return 'User_' . substr(md5($input), 0, 8);

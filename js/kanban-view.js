@@ -402,7 +402,8 @@ class KanbanView {
         footer.className = 'kanban-card-footer';
         
         // Assignee
-        if (card.assignee) {
+        console.log('Données de la carte:', card);
+        if (card.assignee && card.assignee.trim() !== '') {
             const assignee = document.createElement('span');
             assignee.className = 'kanban-assignee';
             assignee.innerHTML = '👤 ' + this.sanitizeHtml(card.assignee);
