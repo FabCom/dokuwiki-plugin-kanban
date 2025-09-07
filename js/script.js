@@ -1290,6 +1290,9 @@
         unlockBoard,
         checkBoardLock,
         
+        // UI helpers
+        hideEditingLoading,
+        
         // For debugging
         getBoardData: (boardId) => kanbanBoards[boardId],
         getAllBoards: () => kanbanBoards

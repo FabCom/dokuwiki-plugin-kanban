@@ -4796,3 +4796,205 @@ body.kanban-fullscreen-active #dokuwiki__content {
         max-width: none;
     }
 }
+
+/* ===== MEDIA MODAL STYLES ===== */
+
+/* Élément média - conteneur avec position relative */
+.kanban-media-item {
+    position: relative;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: white;
+    display: inline-block;
+}
+
+.kanban-media-item:hover {
+    border-color: #007bff;
+    box-shadow: 0 2px 8px rgba(0,123,255,0.2);
+    transform: translateY(-2px);
+}
+
+/* Actions pour chaque élément média - sélecteurs plus spécifiques */
+#kanban-media-browser-modal .kanban-media-item .media-actions {
+    position: absolute !important;
+    top: 5px !important;
+    right: 5px !important;
+    display: none !important;
+    gap: 3px !important;
+    z-index: 100 !important;
+}
+
+#kanban-media-browser-modal .kanban-media-item:hover .media-actions {
+    display: flex !important;
+}
+
+.kanban-media-action-btn {
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    border: none;
+    border-radius: 3px;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+}
+
+.kanban-media-action-btn:hover {
+    background: rgba(0, 0, 0, 0.9);
+}
+
+.kanban-media-action-btn.delete {
+    background: rgba(220, 53, 69, 0.8);
+}
+
+.kanban-media-action-btn.delete:hover {
+    background: rgba(220, 53, 69, 1);
+}
+
+/* Boutons de restauration (dans la corbeille) */
+.kanban-media-action-btn.restore {
+    background: rgba(40, 167, 69, 0.8);
+}
+
+.kanban-media-action-btn.restore:hover {
+    background: rgba(40, 167, 69, 1);
+}
+
+/* Boutons de suppression définitive (dans la corbeille) */
+.kanban-media-action-btn.delete-permanent {
+    background: rgba(139, 0, 0, 0.8);
+}
+
+.kanban-media-action-btn.delete-permanent:hover {
+    background: rgba(139, 0, 0, 1);
+}
+
+/* Indicateur de chargement pour suppression */
+.kanban-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.kanban-loading-overlay .spinner {
+    background: white;
+    padding: 20px 30px;
+    border-radius: 8px;
+    font-size: 16px;
+    color: #495057;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* Notifications */
+.kanban-notification {
+    animation: slideInRight 0.3s ease-out;
+}
+
+.kanban-notification:hover {
+    opacity: 0.9;
+    cursor: pointer;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Modal d'options de corbeille */
+.kanban-trash-options-modal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.kanban-trash-options-modal .kanban-modal-content {
+    width: auto;
+    min-width: 400px;
+    max-width: 500px;
+}
+
+.trash-options {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.trash-options button {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 150px;
+}
+
+.btn-restore {
+    background: #28a745;
+    color: white;
+}
+
+.btn-restore:hover {
+    background: #218838;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+}
+
+.btn-delete-permanent {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-delete-permanent:hover {
+    background: #c82333;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+}
+
+/* Responsive pour les actions médias */
+@media (max-width: 768px) {
+    .kanban-media-item .media-actions {
+        opacity: 1; /* Toujours visible sur mobile */
+        position: static;
+        margin-top: 8px;
+        justify-content: center;
+    }
+    
+    .kanban-media-action-btn {
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+    
+    .kanban-trash-options-modal .kanban-modal-content {
+        min-width: 90vw;
+        margin: 20px;
+    }
+    
+    .trash-options {
+        flex-direction: column;
+        gap: 10px;
+    }
+}

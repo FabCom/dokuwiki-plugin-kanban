@@ -113,6 +113,11 @@
      */
     function closeModal(modal) {
         if (modal && modal.parentNode) {
+            // Nettoyer l'état du bouton d'édition si c'est un modal de carte
+            if (modal.dataset.cardId && window.KanbanPlugin?.hideEditingLoading) {
+                window.KanbanPlugin.hideEditingLoading(modal.dataset.cardId);
+            }
+            
             modal.parentNode.removeChild(modal);
             
             // Reactivate previous modal if exists

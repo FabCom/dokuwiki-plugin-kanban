@@ -14,6 +14,9 @@
         // Performance: Créer et afficher le modal immédiatement avec un contenu minimal
         const modal = window.KanbanModalCore.createModal('kanban-card-modal', 'Éditer la carte');
         
+        // Stocker le cardId dans le modal pour pouvoir nettoyer l'état du bouton
+        modal.dataset.cardId = cardData.id;
+        
         // Afficher le modal avec un loading temporaire
         modal.querySelector('.kanban-modal-body').innerHTML = `
             <div class="kanban-modal-loading">
@@ -126,6 +129,10 @@
 
                 // Bind cancel button
                 modal.querySelector('.kanban-modal-cancel').addEventListener('click', () => {
+                    // Nettoyer l'état du bouton d'édition
+                    if (modal.dataset.cardId && window.KanbanPlugin?.hideEditingLoading) {
+                        window.KanbanPlugin.hideEditingLoading(modal.dataset.cardId);
+                    }
                     window.KanbanModalCore.closeModal(modal);
                 });
 

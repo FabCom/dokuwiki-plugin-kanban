@@ -133,6 +133,21 @@ class KanbanAjaxHandler
                 case 'import_board':
                     $this->importFromJSON(); // Alias pour import_json
                     break;
+                case 'delete_media':
+                    $this->deleteMediaFile();
+                    break;
+                case 'move_to_trash':
+                    $this->moveMediaToTrash();
+                    break;
+                case 'restore_from_trash':
+                    $this->restoreMediaFromTrash();
+                    break;
+                case 'delete_permanent':
+                    $this->deleteMediaPermanently();
+                    break;
+                case 'list_trash':
+                    $this->listTrashContents();
+                    break;
                 default:
                     KanbanErrorManager::sendResponse(false, 'Action non reconnue', [], 'UNKNOWN_ACTION', 400);
             }
@@ -1237,5 +1252,580 @@ class KanbanAjaxHandler
         }
         
         return array_unique(array_filter($links));
+    }
+    
+    /**
+     * Supprime un fichier média
+     */
+    private function deleteMediaFile() {
+        global $INPUT;
+        
+        // Vérification de l'authentification
+        if (!KanbanAuthManager::isAuthenticated()) {
+            KanbanErrorManager::logSecurity('Delete media operation denied - authentication failed');
+            KanbanErrorManager::sendAuthError();
+            return;
+        }
+        
+        $mediaId = $INPUT->str('media_id');
+        
+        if (empty($mediaId)) {
+            KanbanErrorManager::sendResponse(false, 'ID de média manquant', [], 'MISSING_MEDIA_ID', 400);
+            return;
+        }
+        
+        // Décoder l'ID média pour obtenir le chemin réel
+        $mediaPath = base64_decode($mediaId);
+        
+        // Vérification de sécurité: le fichier doit être dans le répertoire data/media
+        $mediaRoot = DOKU_INC . 'data/media/';
+        $fullPath = $mediaRoot . $mediaPath;
+        
+        // Sécurité: vérifier que le chemin est bien dans le répertoire média autorisé
+        $realPath = realpath($fullPath);
+        $realMediaRoot = realpath($mediaRoot);
+        
+        if ($realPath === false || strpos($realPath, $realMediaRoot) !== 0) {
+            KanbanErrorManager::logSecurity('Delete media denied - invalid path', [
+                'media_id' => $mediaId,
+                'media_path' => $mediaPath,
+                'user' => KanbanAuthManager::getCurrentUser()
+            ]);
+            KanbanErrorManager::sendResponse(false, 'Chemin de fichier non autorisé', [], 'INVALID_PATH', 403);
+            return;
+        }
+        
+        // Vérifier les permissions sur le média
+        if (!KanbanAuthManager::canDelete($mediaPath)) {
+            KanbanErrorManager::logSecurity('Delete media denied - insufficient permissions', [
+                'media_id' => $mediaId,
+                'media_path' => $mediaPath,
+                'user' => KanbanAuthManager::getCurrentUser()
+            ]);
+            KanbanErrorManager::sendResponse(false, 'Permissions insuffisantes pour supprimer ce fichier', [], 'ACCESS_DENIED', 403);
+            return;
+        }
+        
+        // Vérifier que le fichier existe
+        if (!file_exists($fullPath)) {
+            KanbanErrorManager::sendResponse(false, 'Fichier non trouvé', [], 'FILE_NOT_FOUND', 404);
+            return;
+        }
+        
+        // Tentative de suppression
+        try {
+            // Supprimer le fichier
+            $result = unlink($fullPath);
+            
+            if ($result) {
+                // Nettoyer le cache
+                $this->cacheManager->clearAllCaches();
+                
+                // Log de l'action
+                KanbanErrorManager::logInfo('Média supprimé avec succès', [
+                    'media_id' => $mediaId,
+                    'media_path' => $mediaPath,
+                    'user' => KanbanAuthManager::getCurrentUser()
+                ]);
+                
+                KanbanErrorManager::sendResponse(true, 'Fichier supprimé avec succès', [
+                    'media_id' => $mediaId
+                ]);
+            } else {
+                KanbanErrorManager::sendResponse(false, 'Impossible de supprimer le fichier', [], 'DELETE_FAILED', 500);
+            }
+            
+        } catch (Exception $e) {
+            KanbanErrorManager::logError('Erreur lors de la suppression du média', [
+                'media_id' => $mediaId,
+                'error' => $e->getMessage(),
+                'user' => KanbanAuthManager::getCurrentUser()
+            ]);
+            
+            KanbanErrorManager::sendResponse(false, 'Erreur lors de la suppression: ' . $e->getMessage(), [], 'DELETE_ERROR', 500);
+        }
+    }
+    
+    /**
+     * Déplace un fichier média vers la corbeille
+     */
+    private function moveMediaToTrash() {
+        global $INPUT;
+        
+        // Buffer any unexpected output
+        ob_start();
+        
+        try {
+            // DEBUG: Log entry
+            KanbanErrorManager::logInfo('moveMediaToTrash called', [
+                'media_id' => $INPUT->str('media_id'),
+                'media_namespace' => $INPUT->str('media_namespace'),
+                'media_filename' => $INPUT->str('media_filename')
+            ]);
+            
+            if (!KanbanAuthManager::isAuthenticated()) {
+                KanbanErrorManager::logSecurity('Move to trash operation denied - authentication failed');
+                ob_end_clean(); // Clear any output
+                KanbanErrorManager::sendAuthError();
+                return;
+            }
+            
+            $mediaId = $INPUT->str('media_id');
+            $mediaNamespace = $INPUT->str('media_namespace', '');
+            $mediaFilename = $INPUT->str('media_filename');
+            
+            if (empty($mediaId) || empty($mediaFilename)) {
+                ob_end_clean();
+                KanbanErrorManager::sendResponse(false, 'Paramètres manquants', [], 'MISSING_PARAMS', 400);
+                return;
+            }
+            
+            // Décoder le média ID (format: namespace:filename)
+            $sourceMediaId = base64_decode($mediaId);
+            $sourceFile = mediaFN($sourceMediaId);
+            
+            // Extraire namespace et filename
+            $parts = explode(':', $sourceMediaId);
+            $sourceNs = count($parts) > 1 ? implode(':', array_slice($parts, 0, -1)) : '';
+            $fileName = array_pop($parts);
+            
+            KanbanErrorManager::logInfo('Processing move to trash', [
+                'sourceMediaId' => $sourceMediaId,
+                'sourceFile' => $sourceFile,
+                'sourceNs' => $sourceNs,
+                'fileName' => $fileName
+            ]);
+            
+            // Vérifications de sécurité
+            if (!file_exists($sourceFile)) {
+                ob_end_clean();
+                KanbanErrorManager::sendResponse(false, 'Fichier source non trouvé', [], 'FILE_NOT_FOUND', 404);
+                return;
+            }
+            
+            // Créer le namespace de corbeille s'il n'existe pas (comme QuillJS)
+            $trashNs = 'corbeille';
+            $trashDir = mediaFN($trashNs . ':dummy');
+            $trashDir = dirname($trashDir);
+            if (!is_dir($trashDir)) {
+                if (!mkdir($trashDir, 0755, true)) {
+                    ob_end_clean();
+                    KanbanErrorManager::sendResponse(false, 'Impossible de créer le dossier corbeille', [], 'MKDIR_FAILED', 500);
+                    return;
+                }
+            }
+            
+            // Construire le chemin de destination avec extension préservée (comme QuillJS)
+            $fileInfo = pathinfo($fileName);
+            $baseName = $fileInfo['filename'];
+            $extension = isset($fileInfo['extension']) ? '.' . $fileInfo['extension'] : '';
+            
+            // Ajouter un suffixe pour éviter les conflits si fichier existe déjà (comme QuillJS)
+            $counter = 0;
+            do {
+                $trashFileName = $baseName . ($counter > 0 ? '_' . $counter : '') . $extension;
+                $trashMediaId = $trashNs . ':' . $trashFileName;
+                $destFile = mediaFN($trashMediaId);
+                $counter++;
+            } while (file_exists($destFile) && $counter < 100);
+            
+            if ($counter >= 100) {
+                ob_end_clean();
+                KanbanErrorManager::sendResponse(false, 'Impossible de trouver un nom unique dans la corbeille', [], 'NAME_CONFLICT', 500);
+                return;
+            }
+            
+            KanbanErrorManager::logInfo('Destination file path', [
+                'destFile' => $destFile,
+                'trashMediaId' => $trashMediaId
+            ]);
+            
+            // Créer le dossier de destination si nécessaire
+            $destDir = dirname($destFile);
+            if (!is_dir($destDir)) {
+                if (!mkdir($destDir, 0755, true)) {
+                    ob_end_clean();
+                    KanbanErrorManager::sendResponse(false, 'Impossible de créer le dossier de destination', [], 'MKDIR_FAILED', 500);
+                    return;
+                }
+            }
+            
+            // Déplacer le fichier
+            if (rename($sourceFile, $destFile)) {
+                KanbanErrorManager::logInfo('File moved to trash successfully', [
+                    'source' => $sourceFile,
+                    'dest' => $destFile
+                ]);
+                
+                // Créer un fichier de métadonnées pour faciliter la restauration (comme QuillJS)
+                $metaFile = $destFile . '.meta.json';
+                $metaData = [
+                    'original_path' => $sourceMediaId,
+                    'original_namespace' => $sourceNs,
+                    'original_filename' => $fileName,
+                    'deleted_date' => date('Y-m-d H:i:s'),
+                    'deleted_by' => $_SERVER['REMOTE_USER'] ?? 'unknown'
+                ];
+                file_put_contents($metaFile, json_encode($metaData, JSON_PRETTY_PRINT));
+                
+                KanbanErrorManager::sendResponse(true, 'Fichier déplacé vers la corbeille avec succès', [
+                    'media_id' => $mediaId,
+                    'trash_path' => $trashMediaId,
+                    'meta_file' => basename($metaFile)
+                ]);
+            } else {
+                ob_end_clean();
+                KanbanErrorManager::sendResponse(false, 'Impossible de déplacer le fichier', [], 'MOVE_FAILED', 500);
+            }
+            
+        } catch (Exception $e) {
+            KanbanErrorManager::logError('Erreur lors du déplacement vers la corbeille', [
+                'error' => $e->getMessage(),
+                'user' => KanbanAuthManager::getCurrentUser()
+            ]);
+            
+            KanbanErrorManager::sendResponse(false, 'Erreur: ' . $e->getMessage(), [], 'MOVE_ERROR', 500);
+        } finally {
+            // Clear any output buffer
+            ob_end_clean();
+        }
+    }
+    
+    /**
+     * Restaure un fichier média depuis la corbeille (comme QuillJS)
+     */
+    private function restoreMediaFromTrash() {
+        global $INPUT;
+        
+        // Buffer any unexpected output
+        ob_start();
+        
+        try {
+            if (!KanbanAuthManager::isAuthenticated()) {
+                KanbanErrorManager::logSecurity('Restore operation denied - authentication failed');
+                ob_end_clean();
+                KanbanErrorManager::sendAuthError();
+                return;
+            }
+            
+            $trashPath = $INPUT->str('trash_path');
+            
+            if (empty($trashPath)) {
+                ob_end_clean();
+                KanbanErrorManager::sendResponse(false, 'Chemin de corbeille manquant', [], 'MISSING_PARAMS', 400);
+                return;
+            }
+            
+            $trashNs = 'corbeille';
+            $trashFile = mediaFN($trashNs . ':' . $trashPath);
+            // mediaFN retourne déjà le chemin complet depuis DOKU_INC
+            $trashFileAbs = $trashFile;
+            $metaFile = $trashFileAbs . '.meta.json';
+            
+            KanbanErrorManager::logInfo('Restoring file', [
+                'trashPath' => $trashPath,
+                'trashNs' => $trashNs,
+                'trashFile' => $trashFile,
+                'trashFileAbs' => $trashFileAbs,
+                'metaFile' => $metaFile,
+                'trashFile_exists' => file_exists($trashFileAbs),
+                'metaFile_exists' => file_exists($metaFile)
+            ]);
+            
+            if (!file_exists($trashFileAbs)) {
+                ob_end_clean();
+                KanbanErrorManager::sendResponse(false, 'Fichier non trouvé dans la corbeille', [], 'FILE_NOT_FOUND', 404);
+                return;
+            }
+            
+            // Lire les métadonnées
+            if (!file_exists($metaFile)) {
+                ob_end_clean();
+                KanbanErrorManager::sendResponse(false, 'Métadonnées de restauration non trouvées', [], 'META_NOT_FOUND', 404);
+                return;
+            }
+            
+            $meta = json_decode(file_get_contents($metaFile), true);
+            if (!$meta || !isset($meta['original_path'])) {
+                ob_end_clean();
+                KanbanErrorManager::sendResponse(false, 'Métadonnées invalides', [], 'INVALID_META', 400);
+                return;
+            }
+            
+            $originalPath = $meta['original_path'];
+            $originalNs = $meta['original_namespace'] ?? '';
+            
+            KanbanErrorManager::logInfo('Restore metadata', [
+                'originalPath' => $originalPath,
+                'originalNs' => $originalNs,
+                'deletedBy' => $meta['deleted_by'] ?? 'unknown',
+                'deletedDate' => $meta['deleted_date'] ?? 'unknown'
+            ]);
+            
+            // Vérifier les permissions de restauration (comme QuillJS)
+            $authLevel = auth_quickaclcheck($originalNs ? $originalNs . ':test' : 'test');
+            if ($authLevel < AUTH_UPLOAD) {
+                ob_end_clean();
+                KanbanErrorManager::sendResponse(false, 'Permissions insuffisantes pour restaurer dans le namespace original', [], 'INSUFFICIENT_PERMS', 403);
+                return;
+            }
+            
+            $destFile = mediaFN($originalPath);
+            
+            // Vérifier si le fichier de destination existe déjà (comme QuillJS)
+            if (file_exists($destFile)) {
+                // Proposer un nouveau nom comme QuillJS
+                $pathInfo = pathinfo($destFile);
+                $counter = 1;
+                do {
+                    $newName = $pathInfo['dirname'] . '/' . $pathInfo['filename'] . '_restored_' . $counter . '.' . $pathInfo['extension'];
+                    $counter++;
+                } while (file_exists($newName));
+                $destFile = $newName;
+                $originalPath = str_replace(dirname(mediaFN('dummy')), '', $destFile);
+                $originalPath = ltrim($originalPath, '/');
+                $originalPath = str_replace('/', ':', $originalPath);
+            }
+            
+            // Créer le dossier de destination si nécessaire
+            $destDir = dirname($destFile);
+            if (!is_dir($destDir)) {
+                if (!mkdir($destDir, 0755, true)) {
+                    ob_end_clean();
+                    KanbanErrorManager::sendResponse(false, 'Impossible de créer le dossier de destination', [], 'MKDIR_FAILED', 500);
+                    return;
+                }
+            }
+            
+            // Restaurer le fichier
+            if (rename($trashFileAbs, $destFile)) {
+                // Supprimer le fichier de métadonnées
+                unlink($metaFile);
+                
+                KanbanErrorManager::logInfo('File restored successfully', [
+                    'source' => $trashFileAbs,
+                    'dest' => $destFile,
+                    'restoredPath' => $originalPath
+                ]);
+                
+                ob_end_clean();
+                KanbanErrorManager::sendResponse(true, 'Fichier restauré avec succès', [
+                    'restored_path' => $originalPath
+                ]);
+            } else {
+                ob_end_clean();
+                KanbanErrorManager::sendResponse(false, 'Échec de la restauration du fichier', [], 'RESTORE_FAILED', 500);
+            }
+            
+        } catch (Exception $e) {
+            KanbanErrorManager::logError('Erreur lors de la restauration', [
+                'error' => $e->getMessage(),
+                'user' => KanbanAuthManager::getCurrentUser()
+            ]);
+            
+            ob_end_clean();
+            KanbanErrorManager::sendResponse(false, 'Erreur: ' . $e->getMessage(), [], 'RESTORE_ERROR', 500);
+        }
+    }
+
+    /**
+     * Supprime définitivement un fichier média (depuis la corbeille)
+     */
+    private function deleteMediaPermanently() {
+        global $INPUT;
+        
+        if (!KanbanAuthManager::isAuthenticated()) {
+            KanbanErrorManager::logSecurity('Permanent delete operation denied - authentication failed');
+            KanbanErrorManager::sendAuthError();
+            return;
+        }
+        
+        $mediaId = $INPUT->str('media_id');
+        $mediaFilename = $INPUT->str('media_filename');
+        
+        if (empty($mediaId) || empty($mediaFilename)) {
+            KanbanErrorManager::sendResponse(false, 'Paramètres manquants', [], 'MISSING_PARAMS', 400);
+            return;
+        }
+        
+        try {
+            // Décoder le chemin (doit être dans la corbeille)
+            $mediaPath = base64_decode($mediaId);
+            
+            // Si le chemin contient 'corbeille/', le convertir en namespace DokuWiki
+            if (strpos($mediaPath, 'corbeille/') === 0) {
+                // Convertir corbeille/filename en corbeille:filename pour mediaFN
+                $trashFilename = str_replace('corbeille/', '', $mediaPath);
+                $trashFile = mediaFN('corbeille:' . $trashFilename);
+                // mediaFN retourne déjà le chemin complet depuis DOKU_INC
+                $fullPath = $trashFile;
+            } else {
+                // Chemin legacy - construire le chemin manuellement
+                $fullPath = DOKU_INC . 'data/media/' . $mediaPath;
+            }
+            
+            KanbanErrorManager::logInfo('Permanent deletion attempt', [
+                'mediaId' => $mediaId,
+                'mediaPath' => $mediaPath,
+                'fullPath' => $fullPath,
+                'file_exists' => file_exists($fullPath)
+            ]);
+            
+            // Vérifier que le fichier est bien dans la corbeille
+            if (strpos($mediaPath, 'corbeille') === false) {
+                KanbanErrorManager::logSecurity('Attempt to permanently delete file not in trash', [
+                    'media_path' => $mediaPath,
+                    'user' => KanbanAuthManager::getCurrentUser()
+                ]);
+                KanbanErrorManager::sendResponse(false, 'Seuls les fichiers dans la corbeille peuvent être supprimés définitivement', [], 'NOT_IN_TRASH', 403);
+                return;
+            }
+            
+            // Vérifications de sécurité standard
+            $realPath = realpath($fullPath);
+            $realMediaRoot = realpath(DOKU_INC . 'data/media/');
+            
+            KanbanErrorManager::logInfo('Path validation', [
+                'realPath' => $realPath,
+                'realMediaRoot' => $realMediaRoot,
+                'realPath_valid' => $realPath !== false,
+                'path_contains_root' => $realPath !== false && strpos($realPath, $realMediaRoot) === 0
+            ]);
+            
+            if ($realPath === false || strpos($realPath, $realMediaRoot) !== 0) {
+                KanbanErrorManager::logSecurity('Invalid path for permanent deletion', [
+                    'media_path' => $mediaPath,
+                    'fullPath' => $fullPath,
+                    'realPath' => $realPath,
+                    'user' => KanbanAuthManager::getCurrentUser()
+                ]);
+                KanbanErrorManager::sendResponse(false, 'Chemin non autorisé', [], 'INVALID_PATH', 403);
+                return;
+            }
+            
+            if (!file_exists($fullPath)) {
+                KanbanErrorManager::sendResponse(false, 'Fichier non trouvé', [], 'FILE_NOT_FOUND', 404);
+                return;
+            }
+            
+            // Suppression définitive
+            if (unlink($fullPath)) {
+                // Supprimer aussi le fichier de métadonnées s'il existe
+                $metaFile = $fullPath . '.meta.json';
+                if (file_exists($metaFile)) {
+                    unlink($metaFile);
+                }
+                
+                // Nettoyer le cache
+                $this->cacheManager->clearAllCaches();
+                
+                KanbanErrorManager::logInfo('Média supprimé définitivement', [
+                    'media_path' => $mediaPath,
+                    'fullPath' => $fullPath,
+                    'meta_deleted' => file_exists($metaFile),
+                    'user' => KanbanAuthManager::getCurrentUser()
+                ]);
+                
+                KanbanErrorManager::sendResponse(true, 'Fichier supprimé définitivement', [
+                    'media_id' => $mediaId
+                ]);
+            } else {
+                KanbanErrorManager::sendResponse(false, 'Impossible de supprimer le fichier', [], 'DELETE_FAILED', 500);
+            }
+            
+        } catch (Exception $e) {
+            KanbanErrorManager::logError('Erreur lors de la suppression définitive', [
+                'error' => $e->getMessage(),
+                'user' => KanbanAuthManager::getCurrentUser()
+            ]);
+            
+            KanbanErrorManager::sendResponse(false, 'Erreur: ' . $e->getMessage(), [], 'DELETE_ERROR', 500);
+        }
+    }
+
+    /**
+     * Liste le contenu de la corbeille (comme QuillJS)
+     */
+    private function listTrashContents() {
+        // Buffer any unexpected output
+        ob_start();
+        
+        try {
+            if (!KanbanAuthManager::isAuthenticated()) {
+                KanbanErrorManager::logSecurity('List trash operation denied - authentication failed');
+                ob_end_clean();
+                KanbanErrorManager::sendAuthError();
+                return;
+            }
+            
+            // Lister les fichiers dans la corbeille (comme QuillJS)
+            $trashNs = 'corbeille';
+            $trashDir = mediaFN($trashNs . ':dummy');
+            $trashDir = dirname($trashDir);
+            
+            $trashItems = [];
+            
+            if (is_dir($trashDir)) {
+                $iterator = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator($trashDir, RecursiveDirectoryIterator::SKIP_DOTS)
+                );
+                
+                foreach ($iterator as $file) {
+                    if ($file->isFile() && !str_ends_with($file->getFilename(), '.meta.json')) {
+                        $relativePath = str_replace($trashDir . '/', '', $file->getPathname());
+                        $metaFile = $file->getPathname() . '.meta.json';
+                        
+                        $item = [
+                            'filename' => $file->getFilename(),
+                            'path' => $relativePath,
+                            'size' => $file->getSize(),
+                            'deleted_date' => date('Y-m-d H:i:s', $file->getMTime()),
+                            'can_restore' => false
+                        ];
+                        
+                        // Lire les métadonnées si disponibles (comme QuillJS)
+                        if (file_exists($metaFile)) {
+                            $meta = json_decode(file_get_contents($metaFile), true);
+                            if ($meta) {
+                                $item['original_path'] = $meta['original_path'] ?? '';
+                                $item['original_namespace'] = $meta['original_namespace'] ?? '';
+                                $item['original_filename'] = $meta['original_filename'] ?? '';
+                                $item['deleted_date'] = $meta['deleted_date'] ?? $item['deleted_date'];
+                                $item['deleted_by'] = $meta['deleted_by'] ?? 'unknown';
+                                
+                                // Vérifier si on peut restaurer (permissions sur le namespace original)
+                                $originalNs = $meta['original_namespace'] ?? '';
+                                $authLevel = auth_quickaclcheck($originalNs ? $originalNs . ':test' : 'test');
+                                $item['can_restore'] = ($authLevel >= AUTH_UPLOAD);
+                            }
+                        }
+                        
+                        $trashItems[] = $item;
+                    }
+                }
+            }
+            
+            // Trier par date de suppression (plus récent en premier) comme QuillJS
+            usort($trashItems, function($a, $b) {
+                return strcmp($b['deleted_date'], $a['deleted_date']);
+            });
+            
+            KanbanErrorManager::logInfo('Trash contents listed', [
+                'item_count' => count($trashItems),
+                'user' => KanbanAuthManager::getCurrentUser()
+            ]);
+            
+            ob_end_clean();
+            KanbanErrorManager::sendResponse(true, 'Liste de la corbeille récupérée', $trashItems);
+            
+        } catch (Exception $e) {
+            KanbanErrorManager::logError('Erreur lors de la liste de la corbeille', [
+                'error' => $e->getMessage(),
+                'user' => KanbanAuthManager::getCurrentUser()
+            ]);
+            
+            ob_end_clean();
+            KanbanErrorManager::sendResponse(false, 'Erreur: ' . $e->getMessage(), [], 'LIST_ERROR', 500);
+        }
     }
 }

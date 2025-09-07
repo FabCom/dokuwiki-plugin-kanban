@@ -6,6 +6,21 @@
 (function() {
     'use strict';
 
+    // Initialize current namespace like QuillJS does
+    let currentNamespace = '';
+    if (window.JSINFO && window.JSINFO.namespace) {
+        currentNamespace = window.JSINFO.namespace;
+    }
+    
+    console.log('🗂️ Kanban Media Manager initialized with namespace:', currentNamespace);
+
+    /**
+     * Check if we are currently in the trash namespace (comme QuillJS)
+     */
+    function isInTrashNamespace() {
+        return currentNamespace && currentNamespace.startsWith('corbeille');
+    }
+
     /**
      * Show media browser modal for selecting media files
      */
@@ -174,6 +189,10 @@
     function loadMediaBrowserWithNamespace(modal, namespace, onMediaSelected = null) {
         const foldersContent = modal.querySelector('#foldersContent');
         const filesContent = modal.querySelector('#filesContent');
+        
+        // Update current namespace like QuillJS does
+        currentNamespace = namespace;
+        console.log('🗂️ Updated currentNamespace to:', currentNamespace);
         
         // Show loading states
         foldersContent.innerHTML = '<div class="loading">Chargement des dossiers...</div>';
@@ -617,7 +636,7 @@
      */
     function createMediaItem(media, onMediaSelected) {
         const item = document.createElement('div');
-        item.className = 'media-item';
+        item.className = 'kanban-media-item';
         item.setAttribute('data-media-id', media.id);
         
         // Create preview
@@ -660,11 +679,73 @@
             ${media.namespace ? `<div class="media-namespace">📁 ${media.namespace}</div>` : ''}
         `;
         
+        // Create actions section - suivant le modèle QuillJS
+        const actions = document.createElement('div');
+        actions.className = 'media-actions';
+        
+        // Différencier les boutons selon le namespace (comme QuillJS)
+        const isInTrash = isInTrashNamespace();
+        
+        if (isInTrash) {
+            // Dans la corbeille : boutons restaurer et supprimer définitivement
+            const restoreBtn = document.createElement('button');
+            restoreBtn.className = 'kanban-media-action-btn restore';
+            restoreBtn.title = 'Restaurer depuis la corbeille';
+            restoreBtn.setAttribute('data-media-id', media.id);
+            restoreBtn.innerHTML = '↩️';
+            
+            const deletePermanentBtn = document.createElement('button');
+            deletePermanentBtn.className = 'kanban-media-action-btn delete-permanent';
+            deletePermanentBtn.title = 'Supprimer définitivement';
+            deletePermanentBtn.setAttribute('data-media-id', media.id);
+            deletePermanentBtn.innerHTML = '�';
+            
+            actions.appendChild(restoreBtn);
+            actions.appendChild(deletePermanentBtn);
+            
+            // Event handlers pour la corbeille
+            restoreBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                console.log('↩️ Restore button clicked for:', media.filename || media.name);
+                restoreFromTrash(media);
+            });
+            
+            deletePermanentBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                console.log('🔥 Delete permanent button clicked for:', media.filename || media.name);
+                deletePermanently(media);
+            });
+            
+        } else {
+            // Dossier normal : bouton déplacer vers corbeille
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'kanban-media-action-btn delete';
+            deleteBtn.title = 'Déplacer vers la corbeille';
+            deleteBtn.setAttribute('data-media-id', media.id);
+            deleteBtn.innerHTML = '🗑️';
+            
+            actions.appendChild(deleteBtn);
+            
+            // Event handler pour dossier normal
+            deleteBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                console.log('🗑️ Delete button clicked for:', media.filename || media.name);
+                moveToTrash(media);
+            });
+        }
+        
+        // Ajouter tous les éléments au DOM
         item.appendChild(preview);
         item.appendChild(info);
+        item.appendChild(actions);
         
-        // Click handler
-        item.addEventListener('click', () => {
+        // Selection handler - clic sur l'item (pas sur le bouton delete)
+        item.addEventListener('click', function(e) {
+            // Ne pas déclencher si on clique sur le bouton delete ou dans actions
+            if (e.target.closest('.media-actions')) return;
+            
+            console.log('📄 Media item selected:', media.filename || media.name);
+            
             if (onMediaSelected) {
                 onMediaSelected({
                     id: media.id,
@@ -760,10 +841,283 @@
             return `❌ Erreur d'upload: ${fileName}`;
         }
     }
+    
+    // Système de corbeille inspiré de QuillJS
+    function moveToTrash(media) {
+        console.log('🗑️ moveToTrash called with:', media);
+        
+        const isInTrash = media.namespace && media.namespace.includes('corbeille');
+        
+        if (isInTrash) {
+            console.log('📁 File is already in trash, showing options');
+            // Si déjà dans la corbeille, proposer suppression définitive ou restauration
+            showTrashOptions(media);
+        } else {
+            console.log('📤 Moving file to trash');
+            // Déplacer vers la corbeille
+            if (confirm(`Déplacer "${media.filename || media.name}" vers la corbeille ?`)) {
+                moveMediaToTrash(media);
+            } else {
+                console.log('❌ User cancelled move to trash');
+            }
+        }
+    }
+    
+    // Options pour les fichiers dans la corbeille
+    function showTrashOptions(media) {
+        const modal = document.createElement('div');
+        modal.className = 'kanban-modal kanban-trash-options-modal';
+        modal.innerHTML = `
+            <div class="kanban-modal-content">
+                <div class="kanban-modal-header">
+                    <h3>Options pour "${media.filename || media.name}"</h3>
+                    <button class="kanban-modal-close">&times;</button>
+                </div>
+                <div class="kanban-modal-body">
+                    <p>Ce fichier est dans la corbeille. Que souhaitez-vous faire ?</p>
+                    <div class="trash-options">
+                        <button class="btn-restore">📁 Restaurer</button>
+                        <button class="btn-delete-permanent">🗑️ Supprimer définitivement</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Event handlers
+        modal.querySelector('.kanban-modal-close').addEventListener('click', () => {
+            document.body.removeChild(modal);
+        });
+        
+        modal.querySelector('.btn-restore').addEventListener('click', () => {
+            restoreMediaFromTrash(media);
+            document.body.removeChild(modal);
+        });
+        
+        modal.querySelector('.btn-delete-permanent').addEventListener('click', () => {
+            if (confirm('Supprimer définitivement ce fichier ?\n\nCette action est irréversible !')) {
+                deleteMediaPermanently(media);
+                document.body.removeChild(modal);
+            }
+        });
+        
+        // Close on background click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+            }
+        });
+    }
+    
+    // Fonction de confirmation de suppression (inspirée de QuillJS)
+    function showDeleteConfirmation(media) {
+        moveToTrash(media);
+    }
+    
+    // Déplacer vers la corbeille
+    function moveMediaToTrash(media) {
+        performMediaAction('move_to_trash', media, 'Déplacement vers la corbeille...');
+    }
+    
+    // Restaurer depuis la corbeille
+    function restoreMediaFromTrash(media) {
+        performMediaAction('restore_from_trash', media, 'Restauration en cours...');
+    }
+    
+    // Suppression définitive
+    function deleteMediaPermanently(media) {
+        performMediaAction('delete_permanent', media, 'Suppression définitive...');
+    }
+
+    // Restaurer depuis la corbeille (fonction directe pour boutons)
+    function restoreFromTrash(media) {
+        if (confirm(`Restaurer "${media.filename || media.name}" depuis la corbeille ?`)) {
+            console.log('↩️ Restoring file from trash:', media.filename || media.name);
+            restoreMediaFromTrash(media);
+        } else {
+            console.log('❌ User cancelled restore from trash');
+        }
+    }
+
+    // Suppression définitive (fonction directe pour boutons)
+    function deletePermanently(media) {
+        if (confirm(`Supprimer définitivement "${media.filename || media.name}" ?\n\nCette action est irréversible !`)) {
+            console.log('🔥 Permanently deleting file:', media.filename || media.name);
+            deleteMediaPermanently(media);
+        } else {
+            console.log('❌ User cancelled permanent deletion');
+        }
+    }
+    
+    // Fonction générique pour les actions média
+    function performMediaAction(action, media, loadingMessage) {
+        // Construire l'ID complet du média avec le namespace (comme QuillJS)
+        let mediaId = media.id || media.file || media.name;
+        let fullMediaId = mediaId;
+        
+        // Si nous avons un namespace et que l'ID ne le contient pas déjà, l'ajouter
+        if (currentNamespace && !mediaId.includes(':')) {
+            fullMediaId = currentNamespace + ':' + mediaId;
+        }
+        
+        console.log('🗑️ performMediaAction:', {
+            action: action,
+            mediaId: mediaId,
+            fullMediaId: fullMediaId,
+            currentNamespace: currentNamespace,
+            media: media
+        });
+        
+        const formData = new FormData();
+        formData.append('call', 'kanban');
+        formData.append('action', action);
+        formData.append('sectok', window.JSINFO?.sectok || '');
+        
+        // Paramètres spécifiques selon l'action (comme QuillJS)
+        if (action === 'restore_from_trash') {
+            // Pour la restauration, envoyer le nom complet avec extension
+            let trashPath = media.name || media.filename || mediaId;
+            // Enlever 'corbeille:' si présent dans l'ID
+            if (trashPath.startsWith('corbeille:')) {
+                trashPath = trashPath.replace('corbeille:', '');
+            }
+            formData.append('trash_path', trashPath);
+            console.log('📤 Sending trash_path:', trashPath);
+        } else if (action === 'delete_permanent') {
+            // Pour suppression définitive, envoyer le nom complet avec extension
+            let trashPath = media.name || media.filename || mediaId;
+            // Enlever 'corbeille:' si présent dans l'ID
+            if (trashPath.startsWith('corbeille:')) {
+                trashPath = trashPath.replace('corbeille:', '');
+            }
+            formData.append('media_id', btoa('corbeille/' + trashPath)); // Chemin complet dans corbeille
+            formData.append('media_filename', trashPath);
+            console.log('📤 Sending delete_permanent for path:', 'corbeille/' + trashPath);
+        } else {
+            // Pour les autres actions, envoyer l'ID encodé
+            formData.append('media_id', btoa(fullMediaId)); // Encoder en base64 comme attendu par le backend
+            formData.append('media_namespace', currentNamespace || '');
+            formData.append('media_filename', media.filename || media.name || mediaId);
+        }
+        
+        // Afficher un indicateur de chargement
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.className = 'kanban-loading-overlay';
+        loadingIndicator.innerHTML = `<div class="spinner">${loadingMessage}</div>`;
+        document.body.appendChild(loadingIndicator);
+        
+        fetch(window.DOKU_BASE + 'lib/exe/ajax.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            console.log('📡 Response status:', response.status);
+            console.log('📡 Response headers:', response.headers);
+            return response.text(); // D'abord en text pour debug
+        })
+        .then(text => {
+            console.log('📡 Raw response:', text);
+            
+            // Essayer de parser le JSON
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error('❌ JSON Parse error:', e);
+                console.error('📄 Response text:', text);
+                throw new Error('Réponse serveur invalide: ' + text.substring(0, 100));
+            }
+            
+            if (data.success) {
+                // Supprimer l'élément de l'interface
+                const mediaItem = document.querySelector(`[data-media-id="${media.id}"]`);
+                if (mediaItem) {
+                    mediaItem.remove();
+                }
+                
+                // Messages de succès selon l'action
+                const messages = {
+                    'move_to_trash': 'Fichier déplacé vers la corbeille',
+                    'restore_from_trash': 'Fichier restauré avec succès',
+                    'delete_permanent': 'Fichier supprimé définitivement'
+                };
+                
+                showNotification(messages[action] || 'Action réalisée avec succès', 'success');
+                
+                // Rafraîchir la liste
+                refreshMediaList();
+            } else {
+                showNotification(data.error || 'Erreur lors de l\'action', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Erreur lors de l\'action:', error);
+            showNotification('Erreur de connexion', 'error');
+        })
+        .finally(() => {
+            // Supprimer l'indicateur de chargement
+            document.body.removeChild(loadingIndicator);
+        });
+    }
+    
+    // Fonction de suppression de média (backward compatibility)
+    function deleteMediaFile(media) {
+        moveToTrash(media);
+    }
+    
+    // Fonction d'affichage de notifications
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `kanban-notification kanban-notification-${type}`;
+        notification.textContent = message;
+        
+        // Styles inline pour la notification
+        Object.assign(notification.style, {
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            padding: '12px 24px',
+            borderRadius: '4px',
+            color: 'white',
+            zIndex: '10000',
+            fontSize: '14px',
+            backgroundColor: type === 'success' ? '#4CAF50' : type === 'error' ? '#F44336' : '#2196F3'
+        });
+        
+        document.body.appendChild(notification);
+        
+        // Auto-suppression après 3 secondes
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 3000);
+    }
+    
+    // Fonction de rafraîchissement de la liste des médias
+    function refreshMediaList() {
+        // Recharger la liste des médias du dossier actuel
+        const currentFolder = document.querySelector('.kanban-media-folder.active')?.dataset.folder;
+        if (currentFolder) {
+            loadMediaFromFolder(currentFolder);
+        }
+    }
 
     // Export to global scope
     window.KanbanMediaManager = {
-        showMediaBrowser
+        showMediaBrowser,
+        createMediaItem,
+        showDeleteConfirmation,
+        deleteMediaFile,
+        showNotification,
+        refreshMediaList,
+        moveToTrash,
+        showTrashOptions,
+        moveMediaToTrash,
+        restoreMediaFromTrash,
+        deleteMediaPermanently,
+        performMediaAction
     };
 
 })();
