@@ -282,7 +282,7 @@ class KanbanView {
         columnDiv.dataset.columnId = column.id;
         
         // En-tête de colonne - ne l'afficher que si ce n'est pas une vue carte seule
-        if (!isSingleView || this.config.column) {
+        if (!isSingleView && !this.config.column) {
             const header = document.createElement('div');
             header.className = 'kanban-column-header';
             
@@ -392,7 +392,8 @@ class KanbanView {
         if (card.description) {
             const description = document.createElement('div');
             description.className = 'kanban-card-description';
-            description.textContent = card.description;
+            console.log('Description avant sanitization :', card.description);
+            description.innerHTML = this.sanitizeHtml(card.description);
             cardDiv.appendChild(description);
         }
         
@@ -485,11 +486,20 @@ class KanbanView {
         return null;
     }
     
+    /**
+     * Décoder les entités HTML
+     */
+    decodeHtmlEntities(html) {
+        const textarea = document.createElement('textarea');
+        textarea.innerHTML = html;
+        return textarea.value;
+    }
+
     sanitizeHtml(html) {
-        // Basique sanitization - dans un vrai projet, utilisez DOMPurify
-        const temp = document.createElement('div');
-        temp.textContent = html;
-        return temp.innerHTML;
+        // D'abord décoder les entités HTML qui viennent du backend
+        const decoded = this.decodeHtmlEntities(html);
+        // Puis réencoder de manière sécurisée avec KanbanUtils (comme dans script.js)
+        return KanbanUtils.escapeHtml(decoded);
     }
     
     /**

@@ -99,8 +99,6 @@ class KanbanSecurityPolicy
         switch ($type) {
             case 'username':
                 // Username should only contain safe characters
-
-                //if empty
                 if (empty($input)) {
                     self::logSecurity("Empty username sanitized");
                     return '';
@@ -121,10 +119,10 @@ class KanbanSecurityPolicy
                 return $input;
                 
             case 'text':
+            case 'html':
             default:
-                // General text - remove dangerous characters
-                $input = preg_replace('/[<>"\']/', '', $input);
-                return substr($input, 0, 200); // Limit length
+                // Encoder les caractères dangereux mais préserver les apostrophes
+                return htmlspecialchars($input, ENT_QUOTES, 'UTF-8');
         }
     }
     
