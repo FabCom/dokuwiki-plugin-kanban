@@ -53,6 +53,41 @@ class KanbanAssetManager
             'rel' => 'stylesheet',
             'href' => DOKU_BASE . 'lib/plugins/kanban/css/kanban-performance.css'
         ];
+
+        // Add btn styles
+        $event->data['link'][] = [
+            'type' => 'text/css',
+            'rel' => 'stylesheet',
+            'href' => DOKU_BASE . 'lib/plugins/kanban/css/btn.css'
+        ];
+
+        // Add import-export styles
+        $event->data['link'][] = [
+            'type' => 'text/css',
+            'rel' => 'stylesheet',
+            'href' => DOKU_BASE . 'lib/plugins/kanban/css/import-export.css'
+        ];
+
+        // Add media-manager styles
+        $event->data['link'][] = [
+            'type' => 'text/css',
+            'rel' => 'stylesheet',
+            'href' => DOKU_BASE . 'lib/plugins/kanban/css/media-manager.css'
+        ];
+
+        // Add notifications styles
+        $event->data['link'][] = [
+            'type' => 'text/css',
+            'rel' => 'stylesheet',
+            'href' => DOKU_BASE . 'lib/plugins/kanban/css/notifications.css'
+        ];
+
+        // Add kanban-view styles
+        $event->data['link'][] = [
+            'type' => 'text/css',
+            'rel' => 'stylesheet',
+            'href' => DOKU_BASE . 'lib/plugins/kanban/css/kanbanview.css'
+        ];
     }
     
     /**

@@ -55,6 +55,8 @@ class KanbanView {
             }
             
             const data = await response.json();
+            console.log('Données récupérées pour le kanban:', data); // Ajoutez cette ligne
+
             return data;
             
         } catch (error) {
@@ -104,7 +106,7 @@ class KanbanView {
         link.title = `Voir le kanban complet : ${this.config.board}`;
         
         // Style du lien
-        link.style.color = 'white';
+        link.style.color = 'var(--main-bg)';
         link.style.textDecoration = 'none';
         
         link.addEventListener('mouseover', () => {
@@ -402,7 +404,6 @@ class KanbanView {
         footer.className = 'kanban-card-footer';
         
         // Assignee
-        console.log('Données de la carte:', card);
         if (card.assignee && card.assignee.trim() !== '') {
             const assignee = document.createElement('span');
             assignee.className = 'kanban-assignee';
@@ -495,7 +496,6 @@ class KanbanView {
      * Ajouter les indicateurs de contenu comme dans le kanban original
      */
     addContentIndicators(cardElement, card) {
-        console.log('Ajout indicateurs pour carte:', card.id, card);
         
         // Indicateurs de liens internes, externes et médias
         let indicatorsHtml = '';
@@ -523,7 +523,6 @@ class KanbanView {
             mediaFilesCount = (card.description.match(/\{\{([^}]*)\}\}/g) || []).length;
         }
         
-        console.log('Compteurs indicateurs:', {internalLinksCount, externalLinksCount, mediaFilesCount});
         
         if (internalLinksCount > 0) {
             indicatorsHtml += `<span class="kanban-content-indicator kanban-tooltip" title="${internalLinksCount} lien${internalLinksCount > 1 ? 's' : ''} interne${internalLinksCount > 1 ? 's' : ''}">🔗 ${internalLinksCount}</span>`;
@@ -546,7 +545,6 @@ class KanbanView {
             indicatorsContainer.className = 'kanban-card-indicators';
             indicatorsContainer.innerHTML = indicatorsHtml;
             
-            console.log('Création container indicateurs avec HTML:', indicatorsHtml);
             
             // Insérer après la description, avant le footer
             const footer = cardElement.querySelector('.kanban-card-footer');
@@ -624,9 +622,7 @@ class KanbanView {
     async initDiscussionIndicator(cardElement, cardId) {
         if (typeof window.KanbanDiscussions !== 'undefined' && window.KanbanDiscussions.getDiscussionCount) {
             try {
-                console.log('Chargement discussions pour carte:', cardId, 'page:', this.config.board);
                 const count = await window.KanbanDiscussions.getDiscussionCount(this.config.board, cardId);
-                console.log('Nombre de discussions trouvées:', count);
                 
                 if (count > 0) {
                     // Trouver ou créer le container d'indicateurs

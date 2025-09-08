@@ -145,13 +145,14 @@ class action_plugin_kanban_data extends ActionPlugin
         }
 
         // Chercher les blocs kanban dans le contenu
-        $pattern = '/<kanban[^>]*>(.*?)<\/kanban>/s';
+        $pattern = '/<kanban[^>]*title=["\']([^"\']+)["\'][^>]*>(.*?)<\/kanban>/s';
         
         if (!preg_match($pattern, $content, $matches)) {
             return null;
         }
 
-        $kanbanContent = trim($matches[1]);
+        $kanbanTitle = trim($matches[1]); // Titre extrait
+        $kanbanContent = trim($matches[2]);
         
         // Parser le contenu JSON
         $jsonData = json_decode($kanbanContent, true);
@@ -169,7 +170,7 @@ class action_plugin_kanban_data extends ActionPlugin
         // Si c'est directement un tableau de colonnes
         if (is_array($jsonData) && isset($jsonData[0]['id'])) {
             return [
-                'title' => 'Kanban Board',
+                'title' => $kanbanTitle,
                 'columns' => $jsonData
             ];
         }

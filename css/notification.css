@@ -1,0 +1,168 @@
+/* ===== LOADING & ERROR STATES ===== */
+.kanban-loading {
+    text-align: center;
+    padding: 40px 20px;
+    color: #6c757d;
+    font-size: 16px;
+}
+
+.kanban-error {
+    text-align: center;
+    padding: 40px 20px;
+    color: #dc3545;
+    font-size: 16px;
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 8px;
+    margin: 20px;
+}
+
+/* ===== NOTIFICATIONS ===== */
+.kanban-notification {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    padding: 16px 20px;
+    border-radius: 8px;
+    color: white;
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.4;
+    z-index: 10000; /* Higher z-index to be above modals */
+    animation: slideInRight 0.3s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    max-width: 400px;
+    min-width: 300px;
+    word-wrap: break-word;
+    background: #17a2b8;
+    border-left: 4px solid rgba(255, 255, 255, 0.3);
+}
+
+.kanban-notification-success {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    border-left-color: #ffffff;
+}
+
+.kanban-notification-error {
+    background: linear-gradient(135deg, #dc3545, #e74c3c);
+    border-left-color: #ffffff;
+}
+
+.kanban-notification-info {
+    background: linear-gradient(135deg, #17a2b8, #20c997);
+    border-left-color: #ffffff;
+}
+
+.kanban-notification-warning {
+    background: linear-gradient(135deg, #ffc107, #fd7e14);
+    border-left-color: #ffffff;
+    color: #212529;
+}
+
+/* Multiple notifications stacking */
+.kanban-notification:nth-child(n+2) {
+    margin-top: 10px;
+}
+
+/* Close button styles */
+.kanban-notification-close {
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.kanban-notification-close:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.2) !important;
+    border-radius: 50%;
+}
+
+/* HTML content styling in notifications */
+.kanban-notification strong {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 15px;
+}
+
+.kanban-notification br + br {
+    display: none; /* Prevent double line breaks */
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Loading states for modal content */
+.kanban-modal-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    flex-direction: column;
+}
+
+.kanban-modal-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 150px;
+    flex-direction: column;
+    gap: 15px;
+    color: #d32f2f;
+}
+
+/* Loading states for edit mode */
+.kanban-card-loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    border-radius: 8px;
+    backdrop-filter: blur(1px);
+}
+
+.kanban-loading-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #666;
+    font-weight: 500;
+}
+
+.kanban-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #007cba;
+    border-radius: 50%;
+    animation: kanban-spin 1s linear infinite;
+}
+
+@keyframes kanban-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Animation for loading button */
+.kanban-loading {
+    animation: kanban-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes kanban-pulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 0.4; }
+}
