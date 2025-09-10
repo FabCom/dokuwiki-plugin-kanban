@@ -392,7 +392,6 @@ class KanbanView {
         if (card.description) {
             const description = document.createElement('div');
             description.className = 'kanban-card-description';
-            console.log('Description avant sanitization :', card.description);
             description.innerHTML = this.sanitizeHtml(card.description);
             cardDiv.appendChild(description);
         }
@@ -506,67 +505,126 @@ class KanbanView {
      * Ajouter les indicateurs de contenu comme dans le kanban original
      */
     addContentIndicators(cardElement, card) {
-        
-        // Indicateurs de liens internes, externes et médias
-        let indicatorsHtml = '';
-        let internalLinksCount = 0;
-        let externalLinksCount = 0;
-        let mediaFilesCount = 0;
-        
-        // Vérifier d'abord les propriétés structurées (comme dans votre kanban.txt)
-        if (card.internalLinks && Array.isArray(card.internalLinks)) {
-            internalLinksCount = card.internalLinks.length;
-        }
-        
-        if (card.externalLinks && Array.isArray(card.externalLinks)) {
-            externalLinksCount = card.externalLinks.length;
-        }
-        
-        if (card.media && Array.isArray(card.media)) {
-            mediaFilesCount = card.media.length;
-        }
-        
-        // Si pas de propriétés structurées, compter dans la description
-        if (internalLinksCount === 0 && externalLinksCount === 0 && mediaFilesCount === 0 && card.description) {
-            internalLinksCount = (card.description.match(/\[\[([^\]]*)\]\]/g) || []).length;
-            externalLinksCount = (card.description.match(/https?:\/\/[^\s\]]+/g) || []).length;
-            mediaFilesCount = (card.description.match(/\{\{([^}]*)\}\}/g) || []).length;
-        }
-        
-        
-        if (internalLinksCount > 0) {
-            indicatorsHtml += `<span class="kanban-content-indicator kanban-tooltip" title="${internalLinksCount} lien${internalLinksCount > 1 ? 's' : ''} interne${internalLinksCount > 1 ? 's' : ''}">🔗 ${internalLinksCount}</span>`;
-        }
-        
-        if (externalLinksCount > 0) {
-            indicatorsHtml += `<span class="kanban-content-indicator kanban-tooltip" title="${externalLinksCount} lien${externalLinksCount > 1 ? 's' : ''} externe${externalLinksCount > 1 ? 's' : ''}">🌐 ${externalLinksCount}</span>`;
-        }
-        
-        if (mediaFilesCount > 0) {
-            indicatorsHtml += `<span class="kanban-content-indicator kanban-tooltip" title="${mediaFilesCount} média${mediaFilesCount > 1 ? 's' : ''} lié${mediaFilesCount > 1 ? 's' : ''}">📎 ${mediaFilesCount}</span>`;
-        }
-        
-        // Indicateur de discussions (sera mis à jour de façon asynchrone)
-        const hasVisibleIndicators = indicatorsHtml.trim().length > 0;
-        
-        // Ajouter le container des indicateurs s'il y en a
-        if (hasVisibleIndicators) {
-            const indicatorsContainer = document.createElement('div');
-            indicatorsContainer.className = 'kanban-card-indicators';
-            indicatorsContainer.innerHTML = indicatorsHtml;
-            
-            
-            // Insérer après la description, avant le footer
+        // Vérifier si on est en mode "single card"
+        const isSingleCardView = this.element.classList.contains('single-card');
+
+        if (isSingleCardView) {
+            // Créer un conteneur pour les colonnes
+            const columnsContainer = document.createElement('div');
+            columnsContainer.className = 'kanban-card-links-columns';
+
+            // Colonne des liens internes
+            if (card.internalLinks && card.internalLinks.length > 0) {
+                const internalColumn = document.createElement('div');
+                internalColumn.className = 'kanban-links-column kanban-internal-links-column';
+
+                const internalTitle = document.createElement('h4');
+                internalTitle.textContent = 'Liens internes';
+                internalColumn.appendChild(internalTitle);
+
+                const internalList = document.createElement('ul');
+                card.internalLinks.forEach(link => {
+                    const listItem = document.createElement('li');
+                    const anchor = document.createElement('a');
+                    anchor.href = `${DOKU_BASE}doku.php?id=${link.target}`;
+                    anchor.textContent = link.text || link.target;
+                    listItem.appendChild(anchor);
+                    internalList.appendChild(listItem);
+                });
+                internalColumn.appendChild(internalList);
+                columnsContainer.appendChild(internalColumn);
+            }
+
+            // Colonne des liens externes
+            if (card.externalLinks && card.externalLinks.length > 0) {
+                const externalColumn = document.createElement('div');
+                externalColumn.className = 'kanban-links-column kanban-external-links-column';
+
+                const externalTitle = document.createElement('h4');
+                externalTitle.textContent = 'Liens externes';
+                externalColumn.appendChild(externalTitle);
+
+                const externalList = document.createElement('ul');
+                card.externalLinks.forEach(link => {
+                    const listItem = document.createElement('li');
+                    const anchor = document.createElement('a');
+                    anchor.href = link.url;
+                    anchor.textContent = link.text || link.url;
+                    anchor.target = '_blank';
+                    listItem.appendChild(anchor);
+                    externalList.appendChild(listItem);
+                });
+                externalColumn.appendChild(externalList);
+                columnsContainer.appendChild(externalColumn);
+            }
+
+            // Colonne des médias
+            if (card.media && card.media.length > 0) {
+                const mediaColumn = document.createElement('div');
+                mediaColumn.className = 'kanban-links-column kanban-media-links-column';
+
+                const mediaTitle = document.createElement('h4');
+                mediaTitle.textContent = 'Médias';
+                mediaColumn.appendChild(mediaTitle);
+
+                const mediaList = document.createElement('ul');
+                card.media.forEach(media => {
+                    const listItem = document.createElement('li');
+                    const anchor = document.createElement('a');
+                    anchor.href = media.url;
+                    anchor.textContent = media.name || media.id;
+                    anchor.target = '_blank';
+                    listItem.appendChild(anchor);
+
+                    // Ajouter une miniature si disponible
+                    if (media.thumb) {
+                        const thumbnail = document.createElement('img');
+                        thumbnail.src = media.thumb;
+                        thumbnail.alt = media.name || 'Media thumbnail';
+                        thumbnail.style.maxWidth = '50px';
+                        thumbnail.style.marginRight = '10px';
+                        listItem.insertBefore(thumbnail, anchor);
+                    }
+
+                    mediaList.appendChild(listItem);
+                });
+                mediaColumn.appendChild(mediaList);
+                columnsContainer.appendChild(mediaColumn);
+            }
+
+            // Ajouter les colonnes après la description
             const footer = cardElement.querySelector('.kanban-card-footer');
             if (footer) {
-                cardElement.insertBefore(indicatorsContainer, footer);
+                cardElement.insertBefore(columnsContainer, footer);
             } else {
-                cardElement.appendChild(indicatorsContainer);
+                cardElement.appendChild(columnsContainer);
+            }
+        } else {
+            // Sinon, afficher les indicateurs comme d'habitude
+            let indicatorsHtml = '';
+            if (card.internalLinks && card.internalLinks.length > 0) {
+                indicatorsHtml += `<span class="kanban-content-indicator kanban-tooltip" title="${card.internalLinks.length} lien${card.internalLinks.length > 1 ? 's' : ''} interne${card.internalLinks.length > 1 ? 's' : ''}">🔗 ${card.internalLinks.length}</span>`;
+            }
+            if (card.externalLinks && card.externalLinks.length > 0) {
+                indicatorsHtml += `<span class="kanban-content-indicator kanban-tooltip" title="${card.externalLinks.length} lien${card.externalLinks.length > 1 ? 's' : ''} externe${card.externalLinks.length > 1 ? 's' : ''}">🌐 ${card.externalLinks.length}</span>`;
+            }
+            if (card.media && card.media.length > 0) {
+                indicatorsHtml += `<span class="kanban-content-indicator kanban-tooltip" title="${card.media.length} média${card.media.length > 1 ? 's' : ''} lié${card.media.length > 1 ? 's' : ''}">📎 ${card.media.length}</span>`;
+            }
+
+            if (indicatorsHtml.trim().length > 0) {
+                const indicatorsContainer = document.createElement('div');
+                indicatorsContainer.className = 'kanban-card-indicators';
+                indicatorsContainer.innerHTML = indicatorsHtml;
+
+                const footer = cardElement.querySelector('.kanban-card-footer');
+                if (footer) {
+                    cardElement.insertBefore(indicatorsContainer, footer);
+                } else {
+                    cardElement.appendChild(indicatorsContainer);
+                }
             }
         }
-        
-        // Initialiser les indicateurs de discussions de façon asynchrone
-        this.initDiscussionIndicator(cardElement, card.id);
     }
     
     /**

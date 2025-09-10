@@ -752,7 +752,7 @@
             <button type="button" class="remove-link-btn" title="Supprimer">×</button>`;
         
         linkItem.dataset.target = target;
-        linkItem.dataset.text = text || '';
+        linkItem.dataset.text = title || '';
         
         // Bind remove button
         linkItem.querySelector('.remove-link-btn').addEventListener('click', () => {
@@ -826,8 +826,8 @@
                            placeholder="https://example.com" class="form-control">
                 </div>
                 <div class="form-group">
-                    <label for="external-title">Titre (optionnel)</label>
-                    <input type="text" id="external-title" name="title" 
+                    <label for="external-text">Titre (optionnel)</label>
+                    <input type="text" id="external-text" name="text" 
                            placeholder="Titre du lien" class="form-control">
                 </div>
             </form>
@@ -852,10 +852,10 @@
             e.preventDefault();
             const formData = new FormData(formElement);
             const url = formData.get('url');
-            const title = formData.get('title');
+            const text = formData.get('text');
             
             if (url) {
-                callback(url, title);
+                callback(url, text);
                 window.KanbanModalCore.closeModal(modal);
             }
         });
@@ -875,7 +875,7 @@
     /**
      * Add external link to card
      */
-    function addExternalLinkToCard(modal, url, title) {
+    function addExternalLinkToCard(modal, url, text) {
         const linksList = modal.querySelector('#external-links-list-inline');
         const noLinksMessage = linksList.querySelector('.no-links-message');
         
@@ -898,12 +898,12 @@
         linkItem.innerHTML = `
             <div class="link-info">
                 <div class="link-url">🌐 ${escapeHtml(url)}</div>
-                ${title ? `<div class="link-text">${escapeHtml(title)}</div>` : ''}
+                ${text ? `<div class="link-text">${escapeHtml(text)}</div>` : ''}
             </div>
             <button type="button" class="remove-external-link-btn" title="Supprimer">×</button>`;
         
         linkItem.dataset.url = url;
-        linkItem.dataset.title = title || '';
+        linkItem.dataset.text = text || '';
         
         // Bind remove button
         linkItem.querySelector('.remove-external-link-btn').addEventListener('click', () => {
